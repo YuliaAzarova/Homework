@@ -5,81 +5,105 @@ class Entity(ABC):
         self.position = position
     
     @abstractmethod
-    def symbol(self):
+    @staticmethod
+    def symbol():
         pass
-
-class Damageable():
+#готово
+class Damageable(ABC): #готово
     def __init__(self, hp:float, max_hp):
         self.hp = hp
         self._max_hp = max_hp
     
-    def is_alive(self):
-        if self.hp == 0:
+    def is_alive(self): #готово
+        if self.hp <= 0:
             return False
         return True
     
-    def heal(self, amount):
+    def heal(self, amount): #готово
         self.hp += amount
+        if self.hp > self._max_hp:
+            self.hp = self._max_hp
         return amount
     
-    def take_damage(self, amount):
+    def take_damage(self, amount): #готово
+        if self.hp <= amount:
+            amount = self.hp
+            self.hp = 0
+            return amount
         self.hp -= amount
         return amount
-    
+#готово
 class Attacker(ABC):
     @abstractmethod
     def attack(self, target:Damageable):
         pass
-
+#готова
 class Bonus(ABC, Entity):
     @abstractmethod
     def apply(self, player):
         pass
+#готово
 
-
-class Weapon(ABC):
-    def __init__(self, name, max_damage):
+class Weapon(Entity):
+    def __init__(self,position, name, max_damage):
         self.name = name
         self.max_damage = max_damage
-
+        super().__init__(position)
+    @abstractmethod
     def roll_damage(self):
-        damage = randint(0, self.max_damage)
-        return damage
-    
+        pass
+    @abstractmethod
     def is_available(self):
         pass
+    @staticmethod
+    def symbol():
+        return "W"
+#готово
 class MeleeWeapon(Weapon):
-    def __init__(self, health, damage):
-        super().__init__(health, damage)
-    def damage(self, rage):
+    def __init__(self, args):
+        super().__init__(*args)
+    @abstractmethod
+    def damage(self, rage:float):
         return self.roll_damage()*rage
+    @abstractmethod
+    def is_available(self):
+        pass
+#готово
 class RangedWeapon(Weapon):
-    def __init__(self, health, damage, ammo):
+    def __init__(self, args, ammo):
         self.ammo = ammo
-        super().__init__(health, damage)
-    
-    def consume_ammo(self, n=1):
+        super().__init__(*args)
+    def consume_ammo(self, n=1): #готово
         if n > self.ammo:
             return False
         self.ammo -= n
         return True
+
+    @abstractmethod
+    def is_available(self):
+        pass
     
     def damage(self, accuracy):
         if self.consume_ammo():
-            return self.damage*accuracy
-
+            return self.roll_damage()*accuracy
+        return self.roll_damage()
+#готово
 
 class Structure(ABC, Entity):
     @abstractmethod
     def interact(self, player:"Player"):
         pass
-
+    @staticmethod
+    def symbol():
+        return "T"
+#готово
 
 class Enemy(ABC, Entity, Damageable, Attacker):
-    def __init__(self, lvl, max_enemy_damage, reward_coins):
+    def __init__(self, args, lvl, max_enemy_damage, reward_coins):
         self.lvl = lvl
         self.max_enemy_damage = max_enemy_damage
         self.reward_coins = reward_coins
+        super().__init__(*args)
     
     @abstractmethod
     def before_turn(self, player:"Player"):
@@ -87,15 +111,25 @@ class Enemy(ABC, Entity, Damageable, Attacker):
     def roll_enemy_damage(self):
         damage = randint(1, self.max_enemy_damage)
         return damage
-
+    @staticmethod
+    def symbol():
+        return "E"
+#готово
 
 class Player(Entity, Damageable, Attacker):
-    def __init__(self, lvl, weapon:"Weapon", inventory:dict[str, int], rage, accuracy, statuses:dict[str, int]):
+    def __init__(self, position, hp, max_hp, lvl, weapon:"Weapon", inventory:dict[str, int], rage, accuracy, statuses:dict[str, int]):
+        super().__init__(position, hp, max_hp)
         self.lvl = lvl
         self.weapon = weapon
         self.inventory = inventory
-        self.rage = rage
-        self.accuracy = accuracy
+        if rage >= 1.0:
+            self.rage = rage
+        else:
+            self.rage = 1.0
+        if accuracy >= 1.0:
+            self.accuracy = accuracy
+        else:
+            self.accuracy = 1.0
         self.statuses = statuses
     
     def move(self, d_row, d_col):
@@ -116,14 +150,12 @@ class Player(Entity, Damageable, Attacker):
         
 
 class Rat(Enemy):
-    def __init__(self, infection_chance=0.25, flee_chance_low_hp=0.10, flee_thareshold=0.15, 
-                 infection_damage_base=5.0, infection_turns=3, reward_coins=200):
-        super().__init__(reward_coins)
-        self.infection_chance = infection_chance
-        self.flee_chance_low_hp = flee_chance_low_hp
-        self.flee_thareshold = flee_thareshold
-        self.infection_damage_base = infection_damage_base
-        self.infection_turns = infection_turns
+    def __init__(self):
+        self.infection_chance = 0.25
+        self.flee_chance_low_hp = 0.10
+        self.flee_thareshold = 0.15
+        self.infection_damage_base = 5.0
+        self.infection_turns = 200
     def before_turn(self, player:Player):
         pass
     def attack(self, target:Damageable):
@@ -178,7 +210,7 @@ class Bow(RangedWeapon):
         return super().is_available()
     
     def damage(self, accuracy):
-        ammo -= 1
+        self.ammo -= 1
         super().damage(accuracy)
 class Revolver(RangedWeapon):
     def __init__(self, name, max_damage, ammo):
@@ -224,3 +256,34 @@ class Coins(Bonus):
         self.amount = amount
     def apply(self, player:Player):
         player.inventory["coins"] += self.amount
+
+class Tower(Structure):
+    def __init__(self, reveal_radius=2):
+        self.reveal_radius = reveal_radius
+    def interact(self, board:"Board"):
+        pass
+class Board:
+    def __init__(self, rows, cols, grid, start, goal):
+        self.rows = rows
+        self.cols = cols
+        self.grid = grid
+        self.start = start
+        self.goal = goal
+
+    def place(self, entity: Entity, pos: tuple[int, int]):
+        pass
+    def entity_at(self, pos: tuple[int, int]):
+        pass
+    def in_bounds(self, pos: tuple[int, int]):
+        pass
+    def render(self, player: Player):
+        pass
+
+def start(n: int, m: int, player_lvl: int) -> tuple[Board, Player]:
+ pass
+
+def game(board: Board, player: Player):
+    pass
+
+def main():
+    pass
