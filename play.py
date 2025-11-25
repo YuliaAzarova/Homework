@@ -3,29 +3,28 @@ from random import *
 class Entity(ABC):
     def __init__ (self, position: tuple[int, int]):
         self.position = position
-    
-    @abstractmethod
     @staticmethod
+    @abstractmethod
     def symbol():
         pass
 #готово
-class Damageable(ABC): #готово
+class Damageable(ABC):
     def __init__(self, hp:float, max_hp):
         self.hp = hp
         self._max_hp = max_hp
     
-    def is_alive(self): #готово
+    def is_alive(self):
         if self.hp <= 0:
             return False
         return True
     
-    def heal(self, amount): #готово
+    def heal(self, amount):
         self.hp += amount
         if self.hp > self._max_hp:
             self.hp = self._max_hp
         return amount
     
-    def take_damage(self, amount): #готово
+    def take_damage(self, amount):
         if self.hp <= amount:
             amount = self.hp
             self.hp = 0
@@ -39,9 +38,15 @@ class Attacker(ABC):
         pass
 #готова
 class Bonus(ABC, Entity):
+    def __init__(self, position: tuple[int, int], cost):
+        self.position = position
+        self.cost = cost
     @abstractmethod
     def apply(self, player):
         pass
+    @staticmethod
+    def symbol():
+        return "B"
 #готово
 
 class Weapon(Entity):
@@ -49,11 +54,13 @@ class Weapon(Entity):
         self.name = name
         self.max_damage = max_damage
         super().__init__(position)
-    @abstractmethod
     def roll_damage(self):
-        pass
+        return randint(1, self.max_damage)
     @abstractmethod
     def is_available(self):
+        pass
+    @abstractmethod
+    def damage(self, detail):
         pass
     @staticmethod
     def symbol():
@@ -62,7 +69,6 @@ class Weapon(Entity):
 class MeleeWeapon(Weapon):
     def __init__(self, args):
         super().__init__(*args)
-    @abstractmethod
     def damage(self, rage:float):
         return self.roll_damage()*rage
     @abstractmethod
@@ -86,7 +92,7 @@ class RangedWeapon(Weapon):
     def damage(self, accuracy):
         if self.consume_ammo():
             return self.roll_damage()*accuracy
-        return self.roll_damage()
+        return 0
 #готово
 
 class Structure(ABC, Entity):
@@ -117,7 +123,7 @@ class Enemy(ABC, Entity, Damageable, Attacker):
 #готово
 
 class Player(Entity, Damageable, Attacker):
-    def __init__(self, position, hp, max_hp, lvl, weapon:"Weapon", inventory:dict[str, int], rage, accuracy, statuses:dict[str, int]):
+    def __init__(self, position, hp, max_hp, lvl, weapon: Weapon, inventory:dict[str, int], rage, accuracy, statuses:dict[str, int], fight:bool):
         super().__init__(position, hp, max_hp)
         self.lvl = lvl
         self.weapon = weapon
@@ -131,59 +137,102 @@ class Player(Entity, Damageable, Attacker):
         else:
             self.accuracy = 1.0
         self.statuses = statuses
+        self.fight = fight
     
     def move(self, d_row, d_col):
-        self.symbol(d_row, d_col)
+        self.position = (d_row, d_col)
     
     def attack(self, target: Damageable):
-        pass
-    def choose_weapon(self, new_weapon:"Weapon"):
-        self.weapon = new_weapon
+        if isinstance(self.weapon, RangedWeapon):
+            detail = self.accuracy
+        else:
+            detail = self.rage
+        if not target.is_alive():
+            self.change_fight(0)
+        return target.take_damage(self.weapon.damage(self.rage))
+    def choose_weapon(self, new_weapon:Weapon):
+        choose = input("вы хотите сменить оружие? (y/n) ")
+        if choose == "y":
+            self.weapon = new_weapon
+
     def apply_status_tick(self):
         pass
     def add_coins(self, amount):
         self.inventory["coins"] += amount
-    def use_bonus(self, bonus:"Bonus"):
-        pass
-    def buy_auto_if_needed(self, bonus_factory:callable[[str], "Bonus"]):
-        pass
-        
+    def use_bonus(self, bonus: Bonus):
+        if bonus:
+            bonus.apply(self)
+    def buy_auto_if_needed(self, bonus: Bonus):
+        if self.inventory["coins"] > bonus.cost:
+            self.inventory["coins"] -= bonus.cost
+            self.use_bonus(bonus)
+    @staticmethod
+    def symbol():
+        return "P"
+    def change_fight(self, change):
+        if self.fight != change:
+            self.fight = not self.fight
+
+#все, кроме status_apply_tick
 
 class Rat(Enemy):
-    def __init__(self):
+    def __init__(self, args, weapon: MeleeWeapon):
+        super().__init__(*args)
         self.infection_chance = 0.25
         self.flee_chance_low_hp = 0.10
-        self.flee_thareshold = 0.15
+        self.flee_threshold = 0.15
         self.infection_damage_base = 5.0
-        self.infection_turns = 200
-    def before_turn(self, player:Player):
-        pass
-    def attack(self, target:Damageable):
-        pass
-class Spider(Enemy):
-    def __init__(self, poison_chance=0.10, summon_chance_low_hp=0.10, poison_damage_base=15.0, 
-                 poison_turns=2, reward_coins=250):
-        super().__init__(reward_coins)
-        self.poison_chance = poison_chance
-        self.summon_chance_low_hp = summon_chance_low_hp
-        self.poison_damage_base = poison_damage_base
-
-    def before_turn(self, player:Player):
-        pass
-    def attack(self, target:Damageable):
-        pass
-class Skeleton(Enemy):
-    def __init__(self, weapon:Weapon, reward_coins=150):
+        self.infection_turns = 3
+        self.reward_coins = 200
         self.weapon = weapon
-        super().__init__(reward_coins)
+    def before_turn(self, player:Player):
+        if self.hp < self._max_hp*0.15 and randint(1, 10) == 10:
+            print("крыса убежала")
+            player.inventory["coins"] += self.reward_coins
+            player.change_fight(0)
+        if "infection" not in player.statuses and randint(1, 4) == 4:
+            player.statuses["infection"] = self.infection_turns
+        elif "infection" in player.statuses:
+            player.take_damage(self.infection_damage_base)
+    def attack(self, target:Damageable):
+        self.max_damage = 15 * (1 + self.lvl / 10)
+        target.take_damage(self.weapon.damage(1.0))
+#готов
+class Spider(Enemy):
+    def __init__(self, args, weapon: MeleeWeapon):
+        super().__init__(*args)
+        self.weapon = weapon
+        self.poison_chance = 0.1
+        self.summon_chance_low_hp = 0.1
+        self.poison_damage_base = 15.0
+        self.call_threshold = 0.15
+        self.poison_turns = 2
+        self.reward_coins = 250
+    def before_turn(self, player:Player):
+        if self.hp < self._max_hp * 0.15 and randint(1, 10) == 10:
+            print("паук призвал паука")
+        if randint(1, 10) == 10 and "poison" not in player.statuses:
+            player.statuses["poison"] = self.poison_turns
+            player.take_damage(self.poison_damage_base)
+        elif "poison" in player.statuses:
+            player.take_damage(self.poison_damage_base)
+    def attack(self, target:Damageable):
+        self.weapon.max_damage = 20 * (1 + self.lvl / 10)
+        target.take_damage(self.weapon.damage(1.0))
+#готово
+class Skeleton(Enemy):
+    def __init__(self,args, weapon:Weapon):
+        self.weapon = weapon
+        self.reward_coins = 150
+        super().__init__(*args)
     def before_turn(self, player):
         pass
     def attack(self, target: Damageable):
-        pass
+        target.take_damage(self.weapon.damage(1.0))
     def drop_loot(self, player:Player):
         if not isinstance(self.weapon, Fist):
-            return self.weapon
-
+            player.choose_weapon(self.weapon)
+#готово
 
 class Fist(MeleeWeapon):
     def __init__(self, name, max_damage=20):
