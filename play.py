@@ -79,7 +79,7 @@ class RangedWeapon(Weapon):
     def __init__(self, args, ammo):
         self.ammo = ammo
         super().__init__(*args)
-    def consume_ammo(self, n=1): #готово
+    def consume_ammo(self, n=1):
         if n > self.ammo:
             return False
         self.ammo -= n
@@ -87,8 +87,9 @@ class RangedWeapon(Weapon):
 
     @abstractmethod
     def is_available(self):
-        pass
-    
+        if self.ammo > 0:
+            return True
+        return False
     def damage(self, accuracy):
         if self.consume_ammo():
             return self.roll_damage()*accuracy
@@ -234,40 +235,54 @@ class Skeleton(Enemy):
             player.choose_weapon(self.weapon)
 #готово
 
-class Fist(MeleeWeapon):
-    def __init__(self, name, max_damage=20):
-        self.name = name
-        self.max_damage = max_damage
+
+class Fist(MeleeWeapon, ABC):
+    def __init__(self, position, name):
+        self.max_damage = 20
+        super().__init__(position, name)
     def damage(self, rage):
         return super().damage(rage)
-class Stick(MeleeWeapon):
-    def __init__(self, name, max_damage, durability):
-        self.name = name
-        self.max_damage = max_damage
-        self.durability = durability
     def is_available(self):
-        return super().is_available()
+        return True
+#готово
+class Stick(MeleeWeapon, ABC):
+    def __init__(self, position, name):
+        self.durability = randint(10, 20)
+        self.max_damage = 25
+        super().__init__(position, name)
+    def is_available(self):
+        if self.durability > 0:
+            return True
+        return False
     def damage(self, rage):
         self.durability -= 1
         return super().damage(rage)
-
+#готово
 class Bow(RangedWeapon):
-    def  __init__(self, name, max_damage, ammo):
-        super().__init__(name, max_damage, ammo)
+    def  __init__(self, position, name):
+        self.max_damage = 35
+        super().__init__(position, name)
+        self.ammo = randint(10, 15)
 
     def is_available(self):
-        return super().is_available()
+        super().is_available()
     
     def damage(self, accuracy):
-        self.ammo -= 1
         super().damage(accuracy)
+#готово
 class Revolver(RangedWeapon):
-    def __init__(self, name, max_damage, ammo):
-        super().__init__(name, ammo, max_damage)
+    def __init__(self, position, name, ammo):
+        self.max_damage = 45
+        self.ammo = randint(5, 15)
+        super().__init__(position, name)
     def is_available(self):
-        return super().is_available()
+        super().is_available()
     def damage(self, accuracy):
-        return super().damage(accuracy)
+        if self.consume_ammo(2):
+            return self.roll_damage() * accuracy
+        return 0
+#готово
+
 
 class Medkit(Bonus):
     def __init__(self, power):
