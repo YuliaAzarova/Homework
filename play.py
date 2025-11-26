@@ -12,18 +12,18 @@ class Damageable(ABC):
     def __init__(self, hp:float, max_hp):
         self.hp = hp
         self._max_hp = max_hp
-    
+
     def is_alive(self):
         if self.hp <= 0:
             return False
         return True
-    
+
     def heal(self, amount):
         self.hp += amount
         if self.hp > self._max_hp:
             self.hp = self._max_hp
         return amount
-    
+
     def take_damage(self, amount):
         if self.hp <= amount:
             amount = self.hp
@@ -37,16 +37,17 @@ class Attacker(ABC):
     def attack(self, target:Damageable):
         pass
 #готова
-class Bonus(ABC, Entity):
-    def __init__(self, position: tuple[int, int], cost):
+class Bonus(Entity):
+    def __init__(self, position: tuple[int, int], price):
         self.position = position
-        self.cost = cost
+        self.price = price
     @abstractmethod
     def apply(self, player):
         pass
     @staticmethod
     def symbol():
-        return "B"
+        s = 'B'
+        return s
 #готово
 
 class Weapon(Entity):
@@ -96,7 +97,7 @@ class RangedWeapon(Weapon):
         return 0
 #готово
 
-class Structure(ABC, Entity):
+class Structure(Entity):
     @abstractmethod
     def interact(self, player:"Player"):
         pass
@@ -105,13 +106,13 @@ class Structure(ABC, Entity):
         return "T"
 #готово
 
-class Enemy(ABC, Entity, Damageable, Attacker):
-    def __init__(self, args, lvl, max_enemy_damage, reward_coins):
-        self.lvl = lvl
+class Enemy(Entity, Damageable, Attacker):
+    def __init__(self, args, max_enemy_damage, reward_coins):
+        self.lvl = randint(1, 10)
         self.max_enemy_damage = max_enemy_damage
         self.reward_coins = reward_coins
         super().__init__(*args)
-    
+
     @abstractmethod
     def before_turn(self, player:"Player"):
         pass
@@ -124,25 +125,21 @@ class Enemy(ABC, Entity, Damageable, Attacker):
 #готово
 
 class Player(Entity, Damageable, Attacker):
-    def __init__(self, position, hp, max_hp, lvl, weapon: Weapon, inventory:dict[str, int], rage, accuracy, statuses:dict[str, int], fight:bool):
-        super().__init__(position, hp, max_hp)
+    def __init__(self, position, lvl, weapon: Weapon, inventory:dict[str, list[Bonus]], statuses:dict[str, int], fight:bool):
+        hp = 150 * (1 + lvl / 10)
+        super().__init__(position, hp, max_hp=hp)
         self.lvl = lvl
         self.weapon = weapon
         self.inventory = inventory
-        if rage >= 1.0:
-            self.rage = rage
-        else:
-            self.rage = 1.0
-        if accuracy >= 1.0:
-            self.accuracy = accuracy
-        else:
-            self.accuracy = 1.0
+        self.coins = 0
+        self.rage = 1.0
+        self.accuracy = 1.0
         self.statuses = statuses
         self.fight = fight
-    
+
     def move(self, d_row, d_col):
         self.position = (d_row, d_col)
-    
+
     def attack(self, target: Damageable):
         if isinstance(self.weapon, RangedWeapon):
             detail = self.accuracy
@@ -150,7 +147,7 @@ class Player(Entity, Damageable, Attacker):
             detail = self.rage
         if not target.is_alive():
             self.change_fight(0)
-        return target.take_damage(self.weapon.damage(self.rage))
+        return target.take_damage(self.weapon.damage(detail))
     def choose_weapon(self, new_weapon:Weapon):
         choose = input("вы хотите сменить оружие? (y/n) ")
         if choose == "y":
@@ -173,7 +170,6 @@ class Player(Entity, Damageable, Attacker):
     def change_fight(self, change):
         if self.fight != change:
             self.fight = not self.fight
-
 #все, кроме status_apply_tick
 
 class Rat(Enemy):
@@ -189,7 +185,7 @@ class Rat(Enemy):
     def before_turn(self, player:Player):
         if self.hp < self._max_hp*0.15 and randint(1, 10) == 10:
             print("крыса убежала")
-            player.inventory["coins"] += self.reward_coins
+            player.coins += self.reward_coins
             player.change_fight(0)
         if "infection" not in player.statuses and randint(1, 4) == 4:
             player.statuses["infection"] = self.infection_turns
@@ -236,10 +232,10 @@ class Skeleton(Enemy):
 #готово
 
 
-class Fist(MeleeWeapon, ABC):
-    def __init__(self, position, name):
+class Fist(MeleeWeapon):
+    def __init__(self, name):
         self.max_damage = 20
-        super().__init__(position, name)
+        super().__init__(name)
     def damage(self, rage):
         return super().damage(rage)
     def is_available(self):
@@ -266,12 +262,12 @@ class Bow(RangedWeapon):
 
     def is_available(self):
         super().is_available()
-    
+
     def damage(self, accuracy):
         super().damage(accuracy)
 #готово
 class Revolver(RangedWeapon):
-    def __init__(self, position, name, ammo):
+    def __init__(self, position, name):
         self.max_damage = 45
         self.ammo = randint(5, 15)
         super().__init__(position, name)
@@ -285,66 +281,176 @@ class Revolver(RangedWeapon):
 
 
 class Medkit(Bonus):
-    def __init__(self, power):
-        self.power = power
+    def __init__(self, position):
+        self.power = randint(10, 40)
+        self.price = 75
+        self.position = position
     def apply(self, player:Player):
-        pass
+        if player.fight:
+            player.hp += self.power
+            if player.hp > self.max_hp:
+                player.hp = self.max_hp
+            player.inventory["medkits"].pop()
+            return None
+        player.inventory["medkits"].append(self)
+        return None
+#готово
 class Rage(Bonus):
-    def __init__(self, multiplier):
-        self.multiplier = multiplier
+    def __init__(self, position):
+        self.multiplier = randint(1, 10)/10
+        self.price = 50
+        self.position = position
     def apply(self, player:Player):
-        pass
+        if player.fight:
+            player.rage += self.multiplier
+            player.inventory["rage"].pop()
+            return None
+        player.inventory["rage"].append(self)
+        return None
+#готово
 class Arrows(Bonus):
-    def __init__(self, amount):
-        self.amount = amount
+    def __init__(self, position):
+        self.amount = randint(1, 20)
+        self.position = position
     def apply(self, player:Player):
         if isinstance(player.weapon, Bow):
-            player.weapon.ammo += self.amount
-        else:
-            pass
+            player.weapon.consume_ammo(self.amount)
+            player.inventory["arrows"].pop()
+            return None
+        player.inventory["arrows"].append(self)
+        return None
+#готово
 class Bullets(Bonus):
-    def __init__(self, amount):
-        self.amount = amount
+    def __init__(self, position):
+        self.amount = randint(1, 10)
+        self.position = position
     def apply(self, player:Player):
         if isinstance(player.weapon, Revolver):
             player.weapon.ammo += self.amount
-        else:
-            pass
+            player.inventory["bullets"].pop()
+            return None
+        player.inventory["bullets"].append(self)
+        return None
+#готово
 class Accuracy(Bonus):
-    def __init__(self, multiplier):
-        self.multiplier = multiplier
+    def __init__(self, position):
+        self.multiplier = randint(1, 10)/10
+        self.price = 50
+        self.position = position
     def apply(self, player:Player):
-        pass
+        if player.fight:
+            player.accuracy += self.multiplier
+            player.inventory["accuracy"].pop()
+            return None
+        player.inventory["accuracy"].append(self)
+        return None
+#готово
 class Coins(Bonus):
-    def __init__(self, amount):
-        self.amount = amount
+    def __init__(self, position):
+        self.amount = randint(50, 100)
+        self.position = position
     def apply(self, player:Player):
         player.inventory["coins"] += self.amount
+#готово
 
-class Tower(Structure):
-    def __init__(self, reveal_radius=2):
-        self.reveal_radius = reveal_radius
-    def interact(self, board:"Board"):
-        pass
 class Board:
-    def __init__(self, rows, cols, grid, start, goal):
+    def __init__(self, rows, cols, grid: list[list[tuple[Entity | None, bool]]], start, goal):
         self.rows = rows
         self.cols = cols
         self.grid = grid
         self.start = start
         self.goal = goal
-
-    def place(self, entity: Entity, pos: tuple[int, int]):
-        pass
-    def entity_at(self, pos: tuple[int, int]):
-        pass
     def in_bounds(self, pos: tuple[int, int]):
-        pass
+        if self.grid[pos[0]][pos[1]] and pos != self.start and pos != self.goal:
+            return True
+        return False
+    def place(self, entity: Entity, pos: tuple[int, int]):
+        if self.in_bounds(pos):
+            self.grid[pos[0]][pos[1]][0] = entity
+    def entity_at(self, pos: tuple[int, int]):
+        return self.grid[pos[0]][pos[1]][0]
     def render(self, player: Player):
+        field = ""
+        for i in range(self.rows):
+            field += "-"
+        field += "\n"
+        for i in range(self.rows):
+            for j in range(self.cols):
+                if self.grid[i][j][1] == 0:
+                    if self.entity_at((i, j)):
+                        field += f"|{self.entity_at((i, j))}"
+                    else:
+                        field += "| "
+                else:
+                    field += "|X"
+            field += "|\n"
+        for i in range(self.rows):
+            field += "-"
+        return field
+
+class Tower(Structure):
+    def __init__(self):
+        self.reveal_radius = 2
+    def interact(self, board: Board):
         pass
 
-def start(n: int, m: int, player_lvl: int) -> tuple[Board, Player]:
- pass
+def start(n: int, m: int, player_lvl: int):
+    grid = [[(Entity|None, bool) for _ in range(m)] for _ in range(n)]
+    weapons = ["stick", "bow", "revolver"]
+    bonuses = ["medkit", "rage", "arrows", "bullets", "accuracy", "coins"]
+    enemies = ["rat", "spider", "skeleton"]
+    t = ["tower" for _ in range(m*n//100)]
+    w = ["weapon" for _ in range(m * n // 20)]
+    b = ["bonuse" for _ in range(m * n // 3)]
+    e = ["enemy" for _ in range(m * n // 7)]
+    i = m*n - m*n//100 - m*n//20 - m*n//3 - m*n//7
+    s = [None for _ in range(i)]
+    f = [*t, *w, *b, *e, *s]
+    shuffle(f)
+    f[0] = f[-1] = None
+    chetchik = 0
+    for i in range(m):
+        for j in range(n):
+            if f[chetchik] == "tower":
+                cret = Tower()
+            elif f[chetchik] == "weapon":
+                weapon = weapons[randint(0, 2)]
+                if weapon == "stick":
+                    cret = Stick((i, j), "stick")
+                elif weapon == "bow":
+                    cret = Bow((i, j), "bow")
+                else:
+                    cret = Revolver((i, j), "revolver")
+            elif f[chetchik] == "bonuse":
+                bonuse = bonuses[randint(0, 5)]
+                if bonuse == "medkit":
+                    cret = Medkit((i, j))
+                elif bonuse == "rage":
+                    cret = Rage((i, j))
+                elif bonuse == "arrows":
+                    cret = Arrows((i, j))
+                elif bonuse == "bullets":
+                    cret = Bullets((i, j))
+                elif bonuse == "accuracy":
+                    cret = Accuracy((i, j))
+                else:
+                    cret = Coins((i, j))
+            elif f[chetchik] == "enemy":
+                enemy = enemies[randint(0, 2)]
+                if enemy == "rat":
+                    cret = Rat((i, j), Fist("rat's hand"))
+                elif enemy == "spider":
+                    cret = Spider((i, j), Fist("spider's hand"))
+                else:
+                    cret = Skeleton((i, j), Fist("skeleton's hand"))
+            else:
+                cret = None
+            grid[i][j] = (cret, False)
+    board = Board(m, n, grid, (0, 0), (m-1, n-1))
+    player = Player((0, 0), player_lvl, Fist("your's hand"),
+                    {"medkit": [], "rage": [], "arrows": [], "bullets": [], "accuracy": [], "coins": 0},
+                    {}, fight=False)
+    return (board, player)
 
 def game(board: Board, player: Player):
     pass
