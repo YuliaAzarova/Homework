@@ -51,7 +51,7 @@ class Bonus(Entity):
 #готово
 
 class Weapon(Entity):
-    def __init__(self,position, name, max_damage):
+    def __init__(self, position, name, max_damage):
         self.name = name
         self.max_damage = max_damage
         super().__init__(position)
@@ -68,8 +68,8 @@ class Weapon(Entity):
         return "W"
 #готово
 class MeleeWeapon(Weapon):
-    def __init__(self, args):
-        super().__init__(*args)
+    def __init__(self, position, name, max_damage):
+        super().__init__(position, name, max_damage)
     def damage(self, rage:float):
         return self.roll_damage()*rage
     @abstractmethod
@@ -77,9 +77,9 @@ class MeleeWeapon(Weapon):
         pass
 #готово
 class RangedWeapon(Weapon):
-    def __init__(self, args, ammo):
+    def __init__(self, position, name, max_damage, ammo):
         self.ammo = ammo
-        super().__init__(*args)
+        super().__init__(position, name, max_damage)
     def consume_ammo(self, n=1):
         if n > self.ammo:
             return False
@@ -107,11 +107,13 @@ class Structure(Entity):
 #готово
 
 class Enemy(Entity, Damageable, Attacker):
-    def __init__(self, args, max_enemy_damage, reward_coins):
+    def __init__(self, position, max_hp, hp, max_enemy_damage, reward_coins):
         self.lvl = randint(1, 10)
         self.max_enemy_damage = max_enemy_damage
         self.reward_coins = reward_coins
-        super().__init__(*args)
+        self.max_hp = max_hp
+        self.hp = hp
+        super().__init__(position)
 
     @abstractmethod
     def before_turn(self, player:"Player"):
@@ -125,9 +127,11 @@ class Enemy(Entity, Damageable, Attacker):
 #готово
 
 class Player(Entity, Damageable, Attacker):
-    def __init__(self, position, lvl, weapon: Weapon, inventory:dict[str, list[Bonus]], statuses:dict[str, int], fight:bool):
-        hp = 150 * (1 + lvl / 10)
-        super().__init__(position, hp, max_hp=hp)
+    def __init__(self, position, lvl, weapon: Weapon,
+                 inventory:dict[str, list[Bonus]], statuses:dict[str, int], fight:bool):
+        super().__init__(position)
+        self.hp = 150 * (1 + lvl / 10)
+        self.hp = 150 * (1 + lvl / 10)
         self.lvl = lvl
         self.weapon = weapon
         self.inventory = inventory
@@ -156,13 +160,13 @@ class Player(Entity, Damageable, Attacker):
     def apply_status_tick(self):
         pass
     def add_coins(self, amount):
-        self.inventory["coins"] += amount
+        self.inventory["Coins"] += amount
     def use_bonus(self, bonus: Bonus):
         if bonus:
             bonus.apply(self)
     def buy_auto_if_needed(self, bonus: Bonus):
-        if self.inventory["coins"] > bonus.cost:
-            self.inventory["coins"] -= bonus.cost
+        if self.inventory["Coins"] > bonus.cost:
+            self.inventory["Coins"] -= bonus.cost
             self.use_bonus(bonus)
     @staticmethod
     def symbol():
@@ -173,15 +177,16 @@ class Player(Entity, Damageable, Attacker):
 #все, кроме status_apply_tick
 
 class Rat(Enemy):
-    def __init__(self, args, weapon: MeleeWeapon):
-        super().__init__(*args)
+    def __init__(self, position, weapon: MeleeWeapon):
+        lvl = randint(1, 10)
+        hp = 100 * (1 + lvl / 10)
         self.infection_chance = 0.25
         self.flee_chance_low_hp = 0.10
         self.flee_threshold = 0.15
         self.infection_damage_base = 5.0
         self.infection_turns = 3
-        self.reward_coins = 200
         self.weapon = weapon
+        super().__init__(position, max_hp=hp, hp=hp, max_enemy_damage=15 * (1 + lvl / 10), reward_coins=200)
     def before_turn(self, player:Player):
         if self.hp < self._max_hp*0.15 and randint(1, 10) == 10:
             print("крыса убежала")
@@ -193,18 +198,19 @@ class Rat(Enemy):
             player.take_damage(self.infection_damage_base)
     def attack(self, target:Damageable):
         self.max_damage = 15 * (1 + self.lvl / 10)
-        target.take_damage(self.weapon.damage(1.0))
+        return target.take_damage(self.weapon.damage(1.0))
 #готов
 class Spider(Enemy):
-    def __init__(self, args, weapon: MeleeWeapon):
-        super().__init__(*args)
+    def __init__(self, position, weapon: MeleeWeapon):
+        lvl = randint(1, 10)
+        hp = 100 * (1 + lvl / 10)
         self.weapon = weapon
         self.poison_chance = 0.1
         self.summon_chance_low_hp = 0.1
         self.poison_damage_base = 15.0
         self.call_threshold = 0.15
         self.poison_turns = 2
-        self.reward_coins = 250
+        super().__init__(position, max_hp=hp, hp=hp, max_enemy_damage=20 * (1 + lvl / 10), reward_coins=250)
     def before_turn(self, player:Player):
         if self.hp < self._max_hp * 0.15 and randint(1, 10) == 10:
             print("паук призвал паука")
@@ -214,14 +220,15 @@ class Spider(Enemy):
         elif "poison" in player.statuses:
             player.take_damage(self.poison_damage_base)
     def attack(self, target:Damageable):
-        self.weapon.max_damage = 20 * (1 + self.lvl / 10)
+        self.max_damage = 20 * (1 + self.lvl / 10)
         target.take_damage(self.weapon.damage(1.0))
 #готово
 class Skeleton(Enemy):
-    def __init__(self,args, weapon:Weapon):
+    def __init__(self, position, weapon:Weapon):
+        lvl = randint(1, 10)
+        hp = 100 * (1 + lvl / 10)
         self.weapon = weapon
-        self.reward_coins = 150
-        super().__init__(*args)
+        super().__init__(position, hp=hp, max_hp=hp, max_enemy_damage=10 * (1 + lvl / 10), reward_coins=150)
     def before_turn(self, player):
         pass
     def attack(self, target: Damageable):
@@ -235,7 +242,7 @@ class Skeleton(Enemy):
 class Fist(MeleeWeapon):
     def __init__(self, name):
         self.max_damage = 20
-        super().__init__(name)
+        self.name = name
     def damage(self, rage):
         return super().damage(rage)
     def is_available(self):
@@ -244,8 +251,8 @@ class Fist(MeleeWeapon):
 class Stick(MeleeWeapon, ABC):
     def __init__(self, position, name):
         self.durability = randint(10, 20)
-        self.max_damage = 25
-        super().__init__(position, name)
+        max_damage = 25
+        super().__init__(position, name, max_damage)
     def is_available(self):
         if self.durability > 0:
             return True
@@ -256,9 +263,9 @@ class Stick(MeleeWeapon, ABC):
 #готово
 class Bow(RangedWeapon):
     def  __init__(self, position, name):
-        self.max_damage = 35
-        super().__init__(position, name)
-        self.ammo = randint(10, 15)
+        max_damage = 35
+        ammo = randint(10, 15)
+        super().__init__(position, name, max_damage, ammo)
 
     def is_available(self):
         super().is_available()
@@ -268,9 +275,9 @@ class Bow(RangedWeapon):
 #готово
 class Revolver(RangedWeapon):
     def __init__(self, position, name):
-        self.max_damage = 45
-        self.ammo = randint(5, 15)
-        super().__init__(position, name)
+        max_damage = 45
+        ammo = randint(5, 15)
+        super().__init__(position, name, max_damage, ammo)
     def is_available(self):
         super().is_available()
     def damage(self, accuracy):
@@ -290,9 +297,10 @@ class Medkit(Bonus):
             player.hp += self.power
             if player.hp > self.max_hp:
                 player.hp = self.max_hp
-            player.inventory["medkits"].pop()
+            player.inventory["Medkits"].pop()
+            print("Использована аптечка")
             return None
-        player.inventory["medkits"].append(self)
+        player.inventory["Medkits"].append(self)
         return None
 #готово
 class Rage(Bonus):
@@ -303,9 +311,10 @@ class Rage(Bonus):
     def apply(self, player:Player):
         if player.fight:
             player.rage += self.multiplier
-            player.inventory["rage"].pop()
+            player.inventory["Rage"].pop()
+            print("Использована ярость")
             return None
-        player.inventory["rage"].append(self)
+        player.inventory["Rage"].append(self)
         return None
 #готово
 class Arrows(Bonus):
@@ -315,9 +324,9 @@ class Arrows(Bonus):
     def apply(self, player:Player):
         if isinstance(player.weapon, Bow):
             player.weapon.consume_ammo(self.amount)
-            player.inventory["arrows"].pop()
+            player.inventory["Arrows"].pop()
             return None
-        player.inventory["arrows"].append(self)
+        player.inventory["Arrows"].append(self)
         return None
 #готово
 class Bullets(Bonus):
@@ -327,9 +336,9 @@ class Bullets(Bonus):
     def apply(self, player:Player):
         if isinstance(player.weapon, Revolver):
             player.weapon.ammo += self.amount
-            player.inventory["bullets"].pop()
+            player.inventory["Bullets"].pop()
             return None
-        player.inventory["bullets"].append(self)
+        player.inventory["Bullets"].append(self)
         return None
 #готово
 class Accuracy(Bonus):
@@ -340,9 +349,10 @@ class Accuracy(Bonus):
     def apply(self, player:Player):
         if player.fight:
             player.accuracy += self.multiplier
-            player.inventory["accuracy"].pop()
+            player.inventory["Accuracy"].pop()
+            print("Использована точность")
             return None
-        player.inventory["accuracy"].append(self)
+        player.inventory["Accuracy"].append(self)
         return None
 #готово
 class Coins(Bonus):
@@ -350,7 +360,7 @@ class Coins(Bonus):
         self.amount = randint(50, 100)
         self.position = position
     def apply(self, player:Player):
-        player.inventory["coins"] += self.amount
+        player.inventory["Coins"] += self.amount
 #готово
 
 class Board:
@@ -371,28 +381,38 @@ class Board:
         return self.grid[pos[0]][pos[1]][0]
     def render(self, player: Player):
         field = ""
-        for i in range(self.rows):
+        for i in range(self.rows*2+1):
             field += "-"
         field += "\n"
         for i in range(self.rows):
             for j in range(self.cols):
-                if self.grid[i][j][1] == 0:
-                    if self.entity_at((i, j)):
-                        field += f"|{self.entity_at((i, j))}"
+                coord = (i, j)
+                if coord == player.position:
+                    field += f"|{player.symbol()}"
+                    self.grid[coord[0]][coord[1]] = (self.grid[coord[0]][coord[1]][0], True)
+                    continue
+                if self.grid[i][j][1] == True:
+                    if self.entity_at(coord):
+                        field += f"|{self.entity_at(coord).symbol()}"
                     else:
                         field += "| "
                 else:
-                    field += "|X"
+                    if self.entity_at(coord):
+                        field += f"|{self.entity_at(coord).symbol()}"
+                    else:
+                        field += "| "
             field += "|\n"
-        for i in range(self.rows):
+        for i in range(self.rows*2+1):
             field += "-"
         return field
 
 class Tower(Structure):
-    def __init__(self):
+    def __init__(self, position):
         self.reveal_radius = 2
+        self.position = position
     def interact(self, board: Board):
         pass
+
 
 def start(n: int, m: int, player_lvl: int):
     grid = [[(Entity|None, bool) for _ in range(m)] for _ in range(n)]
@@ -409,6 +429,7 @@ def start(n: int, m: int, player_lvl: int):
     shuffle(f)
     f[0] = f[-1] = None
     chetchik = 0
+    print(f)
     for i in range(m):
         for j in range(n):
             if f[chetchik] == "tower":
@@ -446,14 +467,79 @@ def start(n: int, m: int, player_lvl: int):
             else:
                 cret = None
             grid[i][j] = (cret, False)
+            chetchik += 1
     board = Board(m, n, grid, (0, 0), (m-1, n-1))
-    player = Player((0, 0), player_lvl, Fist("your's hand"),
-                    {"medkit": [], "rage": [], "arrows": [], "bullets": [], "accuracy": [], "coins": 0},
-                    {}, fight=False)
+
+    player = Player((0, 0), lvl=player_lvl, weapon=Fist("your's hand"),
+                    inventory={"Medkits": [], "Rage": [], "Arrows": [], "Bullets": [], "Accuracy": [], "Coins": 0},
+                    statuses={}, fight=False)
     return (board, player)
-
+#готово
 def game(board: Board, player: Player):
-    pass
+    print(board.render(player))
+    print(f"Текущее hp: {player.hp}")
+    step = input("Куда вы хотите пойти? (w/a/s/d/stop) ")
+    while step != "stop":
+        if step == "w":
+            new_coord = (player.position[0]-1, player.position[1])
+        elif step == "a":
+            new_coord = (player.position[0], player.position[1]-1)
+        elif step == "s":
+            new_coord = (player.position[0]+1, player.position[1])
+        elif step == "d":
+            new_coord = (player.position[0], player.position[1]+1)
+        else:
+            new_coord = (player.position[0], player.position[1])
+        player.move(new_coord[0], new_coord[1])
 
-def main():
-    pass
+        if player.position == board.goal:
+            print("Поздравляем вы прошли игру, не сдохли и не умерли !!!!!!")
+            break
+
+        if board.in_bounds(new_coord):
+            if isinstance(board.entity_at(new_coord), Enemy):
+                enemy = board.entity_at(new_coord)
+                player.fight = True
+                print("На вас напали!")
+                if isinstance(enemy, Rat):
+                    print(f"Крыса: {enemy.attack(player)}")
+                    print(f"Текущее hp: {player.hp}")
+                    while enemy.is_alive():
+                        for i in player.inventory:
+                            if i != "Coins":
+                                if len(player.inventory[i]) != 0:
+                                    print(f"{i}: {len(player.inventory[i])}")
+                        print("Текущее кол-во монет:", player.inventory["Coins"])
+                        bonus = input(f"Хотите испльзовать бонус?")
+                        if bonus in player.inventory and len(player.inventory[bonus]) != 0:
+                            player.inventory[bonus][0].apply(player)
+
+
+                elif isinstance(enemy, Spider):
+                    print(f"Паук: {enemy.attack(player)}")
+                    print(f"Текущее hp: {player.hp}")
+                elif isinstance(enemy, Skeleton):
+                    print(f"Скелет: {enemy.attack(player)}")
+
+            elif isinstance(board.entity_at(new_coord), Weapon):
+                print(f"Вы нашли оружие! \n{type(board.entity_at(new_coord)).__name__}")
+                old_w = player.weapon
+                player.choose_weapon(board.entity_at(new_coord))
+                if old_w != player.weapon:
+                    if isinstance(old_w, Fist):
+                        board.grid[new_coord[0]][new_coord[1]] = (None, True)
+                    else:
+                        board.place(old_w, new_coord)
+# готово
+            elif isinstance(board.entity_at(new_coord), Bonus):
+                print(f"Вы получили бонус!\n{type(board.entity_at(new_coord)).__name__}")
+                board.entity_at(new_coord).apply(player)
+                board.grid[new_coord[0]][new_coord[1]] = (None, True)
+# готово
+            board.grid[new_coord[0]][new_coord[1]] = (board.entity_at(new_coord), True)
+        print(board.render(player))
+        print(f"Текущее hp: {player.hp}\nКол-во монет: {player.inventory["Coins"]}")
+        step = input("Куда вы хотите пойти? (w/a/s/d/stop) ")
+
+starting = tuple(start(5, 5, 1))
+game(starting[0], starting[1])
