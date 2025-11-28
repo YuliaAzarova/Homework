@@ -131,7 +131,7 @@ class Player(Entity, Damageable, Attacker):
                  inventory:dict[str, list[Bonus]], statuses:dict[str, int], fight:bool):
         super().__init__(position)
         self.hp = 150 * (1 + lvl / 10)
-        self.hp = 150 * (1 + lvl / 10)
+        self.max_hp = 150 * (1 + lvl / 10)
         self.lvl = lvl
         self.weapon = weapon
         self.inventory = inventory
@@ -158,23 +158,26 @@ class Player(Entity, Damageable, Attacker):
             self.weapon = new_weapon
 
     def apply_status_tick(self):
-        pass
+        for i in self.statuses:
+            self.statuses[i] -= 1
     def add_coins(self, amount):
         self.inventory["Coins"] += amount
     def use_bonus(self, bonus: Bonus):
         if bonus:
             bonus.apply(self)
     def buy_auto_if_needed(self, bonus: Bonus):
-        if self.inventory["Coins"] > bonus.cost:
-            self.inventory["Coins"] -= bonus.cost
+        if self.inventory["Coins"] > bonus.price:
+            self.inventory["Coins"] -= bonus.price
+            self.inventory[type(bonus).__name__].append(bonus)
             self.use_bonus(bonus)
+        else:
+            print("У вас не хватает денег, чтобы купить этот бонус")
     @staticmethod
     def symbol():
         return "P"
     def change_fight(self, change):
         if self.fight != change:
             self.fight = not self.fight
-#все, кроме status_apply_tick
 
 class Rat(Enemy):
     def __init__(self, position, weapon: MeleeWeapon):
@@ -193,6 +196,7 @@ class Rat(Enemy):
             player.coins += self.reward_coins
             player.change_fight(0)
         if "infection" not in player.statuses and randint(1, 4) == 4:
+            print("Заражение")
             player.statuses["infection"] = self.infection_turns
         elif "infection" in player.statuses:
             player.take_damage(self.infection_damage_base)
@@ -217,6 +221,7 @@ class Spider(Enemy):
         if randint(1, 10) == 10 and "poison" not in player.statuses:
             player.statuses["poison"] = self.poison_turns
             player.take_damage(self.poison_damage_base)
+            print("Отравление")
         elif "poison" in player.statuses:
             player.take_damage(self.poison_damage_base)
     def attack(self, target:Damageable):
@@ -295,12 +300,12 @@ class Medkit(Bonus):
     def apply(self, player:Player):
         if player.fight:
             player.hp += self.power
-            if player.hp > self.max_hp:
-                player.hp = self.max_hp
-            player.inventory["Medkits"].pop()
+            if player.hp > player.max_hp:
+                player.hp = player.max_hp
+            player.inventory["Medkit"].pop()
             print("Использована аптечка")
             return None
-        player.inventory["Medkits"].append(self)
+        player.inventory["Medkit"].append(self)
         return None
 #готово
 class Rage(Bonus):
@@ -309,6 +314,7 @@ class Rage(Bonus):
         self.price = 50
         self.position = position
     def apply(self, player:Player):
+        print(player.fight)
         if player.fight:
             player.rage += self.multiplier
             player.inventory["Rage"].pop()
@@ -471,7 +477,7 @@ def start(n: int, m: int, player_lvl: int):
     board = Board(m, n, grid, (0, 0), (m-1, n-1))
 
     player = Player((0, 0), lvl=player_lvl, weapon=Fist("your's hand"),
-                    inventory={"Medkits": [], "Rage": [], "Arrows": [], "Bullets": [], "Accuracy": [], "Coins": 0},
+                    inventory={"Medkit": [], "Rage": [], "Arrows": [], "Bullets": [], "Accuracy": [], "Coins": 0},
                     statuses={}, fight=False)
     return (board, player)
 #готово
@@ -501,25 +507,42 @@ def game(board: Board, player: Player):
                 enemy = board.entity_at(new_coord)
                 player.fight = True
                 print("На вас напали!")
-                if isinstance(enemy, Rat):
-                    print(f"Крыса: {enemy.attack(player)}")
-                    print(f"Текущее hp: {player.hp}")
-                    while enemy.is_alive():
-                        for i in player.inventory:
-                            if i != "Coins":
+                while enemy.is_alive():
+
+                    print(f"{type(enemy).__name__}: damage: {enemy.attack(player)}, hp: {enemy.hp}")
+                    if player.hp <= 0:
+                        print("Вы сдохли!\nПроигрыш!")
+                        break
+                    print(f"Текущее hp: {player.hp}\nИмеющиеся бонусы:", end=" ")
+                    for i in player.inventory:
+                        if i != "Coins":
                                 if len(player.inventory[i]) != 0:
-                                    print(f"{i}: {len(player.inventory[i])}")
-                        print("Текущее кол-во монет:", player.inventory["Coins"])
-                        bonus = input(f"Хотите испльзовать бонус?")
-                        if bonus in player.inventory and len(player.inventory[bonus]) != 0:
-                            player.inventory[bonus][0].apply(player)
+                                    print(f"{i}: {len(player.inventory[i])}", end=", ")
 
+                    print("Текущее кол-во монет:", player.inventory["Coins"])
+                    bonus = input("Какой бонус хотите испльзовать? ")
+                    if bonus in player.inventory and len(player.inventory[bonus]) != 0:
+                        if (bonus == "Medkit" or (type(player.weapon).__name__ == "Revolver" and (bonus == "Bullets" or bonus == "Accuracy"))
+                                or (type(player.weapon).__name__ == "Bow" and (bonus == "Arrows" or bonus == "Accuracy"))
+                                or ((type(player.weapon).__name__ == "Stick" or type(player.weapon).__name__ == "Fist") and bonus == "Rage")):
+                            player.use_bonus(player.inventory[bonus][0])
+                        else:
+                            print("Невозможно использовать бонус")
+                    elif bonus in player.inventory and len(player.inventory[bonus]) == 0:
+                        if bonus == "Medkit":
+                            player.buy_auto_if_needed(Medkit(new_coord))
+                        elif bonus == "Rage":
+                            player.buy_auto_if_needed(Rage(new_coord))
+                        elif bonus == "Accuracy":
+                            player.buy_auto_if_needed(Accuracy(new_coord))
+                        else:
+                            print("Вы не можете купить этот бонус")
+                    else:
+                        print("Нет такого бонуса")
 
-                elif isinstance(enemy, Spider):
-                    print(f"Паук: {enemy.attack(player)}")
-                    print(f"Текущее hp: {player.hp}")
-                elif isinstance(enemy, Skeleton):
-                    print(f"Скелет: {enemy.attack(player)}")
+                    player.attack(enemy)
+                    print("\nВы атаковали")
+
 
             elif isinstance(board.entity_at(new_coord), Weapon):
                 print(f"Вы нашли оружие! \n{type(board.entity_at(new_coord)).__name__}")
