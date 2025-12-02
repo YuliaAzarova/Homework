@@ -1,4 +1,5 @@
 from abc import abstractmethod, ABC
+import json
 from random import *
 class Entity(ABC):
     def __init__ (self, position: tuple[int, int]):
@@ -293,10 +294,10 @@ class Bow(RangedWeapon):
         super().__init__(position, name, max_damage, ammo)
 
     def is_available(self):
-        super().is_available()
+        return super().is_available()
 
     def damage(self, accuracy):
-        super().damage(accuracy)
+        return super().damage(accuracy)
 #готово
 class Revolver(RangedWeapon):
     def __init__(self, position, name):
@@ -304,7 +305,7 @@ class Revolver(RangedWeapon):
         ammo = randint(5, 15)
         super().__init__(position, name, max_damage, ammo)
     def is_available(self):
-        super().is_available()
+        return super().is_available()
     def damage(self, accuracy):
         if self.consume_ammo(2):
             return self.roll_damage() * accuracy
@@ -406,7 +407,7 @@ class Board:
         return self.grid[pos[0]][pos[1]][0]
     def render(self, player: Player):
         field = ""
-        for i in range(self.rows*2+1):
+        for i in range(self.cols*2+1):
             field += "-"
         field += "\n"
         for i in range(self.rows):
@@ -441,26 +442,43 @@ class Tower(Structure):
         print(self.position[1] + 1 - self.reveal_radius, "  ", )
 # готово
 
-def start(n: int, m: int, player_lvl: int):
+def start(player_lvl: int):
+    lvl = input("Какой уровень сложности хотите выбрать? (easy/normal/hard) ")
+    with open("difficulty.json", "r", encoding="utf-8") as file:
+        difficulty = json.load(file)
+
+    n = randint(difficulty[lvl]["board_min"], difficulty[lvl]["board_max"])
+    m = randint(difficulty[lvl]["board_min"], difficulty[lvl]["board_max"])
+
     grid = [[(Entity|None, bool) for _ in range(m)] for _ in range(n)]
+
     weapons = ["stick", "bow", "revolver"]
     bonuses = ["medkit", "rage", "arrows", "bullets", "accuracy", "coins"]
     enemies = ["rat", "spider", "skeleton"]
-    t = ["tower" for _ in range(m*n//100)]
-    w = ["weapon" for _ in range(m * n // 20)]
-    b = ["bonuse" for _ in range(m * n // 3)]
-    e = ["enemy" for _ in range(m * n // 7)]
-    i = m*n - m*n//100 - m*n//20 - m*n//3 - m*n//7
+
+    am_t = int(m * n * difficulty[lvl]["tower_multiplier"])
+    am_w = int(m * n * difficulty[lvl]["weapon_multiplier"])
+    am_b = int(m * n * difficulty[lvl]["bonus_multiplier"])
+    am_e = int(m * n * difficulty[lvl]["enemy_multiplier"])
+
+    t = ["tower" for _ in range(am_t)]
+    w = ["weapon" for _ in range(am_w)]
+    b = ["bonuse" for _ in range(am_b)]
+    e = ["enemy" for _ in range(am_e)]
+    i = m*n - am_t - am_w - am_b - am_e
+
     s = [None for _ in range(i)]
     f = [*t, *w, *b, *e, *s]
     shuffle(f)
     f[0] = f[-1] = None
     chetchik = 0
-    print(f)
-    for i in range(m):
-        for j in range(n):
+
+    for i in range(n):
+        for j in range(m):
+
             if f[chetchik] == "tower":
                 cret = Tower((i, j))
+
             elif f[chetchik] == "weapon":
                 weapon = weapons[randint(0, 2)]
                 if weapon == "stick":
@@ -469,6 +487,7 @@ def start(n: int, m: int, player_lvl: int):
                     cret = Bow((i, j), "bow")
                 else:
                     cret = Revolver((i, j), "revolver")
+
             elif f[chetchik] == "bonuse":
                 bonuse = bonuses[randint(0, 5)]
                 if bonuse == "medkit":
@@ -483,6 +502,7 @@ def start(n: int, m: int, player_lvl: int):
                     cret = Accuracy((i, j))
                 else:
                     cret = Coins((i, j))
+
             elif f[chetchik] == "enemy":
                 enemy = enemies[randint(0, 2)]
                 if enemy == "rat":
@@ -491,11 +511,14 @@ def start(n: int, m: int, player_lvl: int):
                     cret = Spider((i, j), Fist("spider's hand"))
                 else:
                     cret = Skeleton((i, j), Fist("skeleton's hand"))
+
             else:
                 cret = None
+
             grid[i][j] = (cret, False)
+
             chetchik += 1
-    board = Board(m, n, grid, (0, 0), (m-1, n-1))
+    board = Board(n, m, grid, (0, 0), (n-1, m-1))
 
     player = Player((0, 0), lvl=player_lvl, weapon=Fist("your's hand"),
                     inventory={"Medkit": [], "Rage": [], "Arrows": [], "Bullets": [], "Accuracy": [], "Coins": 0},
@@ -507,6 +530,8 @@ def game(board: Board, player: Player):
     print(board.render(player))
     print(f"Текущее hp: {player.hp}")
     step = input("Куда вы хотите пойти? (w/a/s/d/exit) ")
+    lvl = 1
+    to_save = None
     while step != "exit":
         over = None
         if step == "w":
@@ -520,9 +545,15 @@ def game(board: Board, player: Player):
         else:
             new_coord = (player.position[0], player.position[1])
         player.move(new_coord[0], new_coord[1])
+
         if player.position == board.goal:
-            print("\n\n\033[35mПоздравляем вы прошли игру, не сдохли и не умерли !!!!!!")
-            break
+            print("\n\n\033[35mПоздравляем вы прошли уровень, не сдохли и не умерли !!!!!!")
+            to_save = (player, lvl)
+            lvl += 1
+            starting = tuple(start(player.lvl))
+            board = starting[0]
+            player.position = (0, 0)
+
 
         if board.in_bounds(new_coord):
             if isinstance(board.entity_at(new_coord), Enemy):
@@ -617,11 +648,12 @@ def game(board: Board, player: Player):
 
         if over or player.apply_status_tick() == False:
             print("\n\n\033[36mПроигрыш! Вы сдохли или умерли!!")
+
             break
 
         print("\033[0m", board.render(player))
-        print(f"Текущее hp: {player.hp}, lvl: {player.lvl}\nКол-во монет: {player.inventory["Coins"]}")
+        print(f"lvl уровня: {lvl}\nТекущее hp: {player.hp}, lvl игрока: {player.lvl}\nКол-во монет: {player.inventory["Coins"]}")
         step = input("Куда вы хотите пойти? (w/a/s/d/stop) ")
 
-starting = tuple(start(10, 10, 1))
+starting = tuple(start(1))
 game(starting[0], starting[1])
