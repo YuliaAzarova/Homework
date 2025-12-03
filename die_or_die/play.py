@@ -1,6 +1,12 @@
 from abc import abstractmethod, ABC
 import json
 from random import *
+
+CLASS_SERIALIZE = {}
+
+def register_class(cls):
+    CLASS_SERIALIZE[cls.__name__] = cls
+    return cls
 class Entity(ABC):
     def __init__ (self, position: tuple[int, int]):
         self.position = position
@@ -9,6 +15,7 @@ class Entity(ABC):
     def symbol():
         pass
 #готово
+
 class Damageable(ABC):
     def __init__(self, hp:float, max_hp):
         self.hp = hp
@@ -33,22 +40,30 @@ class Damageable(ABC):
         self.hp -= amount
         return amount
 #готово
+
 class Attacker(ABC):
     @abstractmethod
     def attack(self, target:Damageable):
         pass
 #готова
+
 class Bonus(Entity):
     def __init__(self, position: tuple[int, int], price):
         self.position = position
         self.price = price
+
     @abstractmethod
     def apply(self, player):
         pass
+
     @staticmethod
     def symbol():
         s = 'B'
         return s
+
+    @abstractmethod
+    def to_dict(self):
+        pass
 #готово
 
 class Weapon(Entity):
@@ -56,27 +71,43 @@ class Weapon(Entity):
         self.name = name
         self.max_damage = max_damage
         super().__init__(position)
+
     def roll_damage(self):
         return randint(1, self.max_damage)
+
     @abstractmethod
     def is_available(self):
         pass
+
     @abstractmethod
     def damage(self, detail):
         pass
+
     @staticmethod
     def symbol():
         return "W"
+
+    @classmethod
+    def from_dict(cls, d):
+        return cls(**d)
+
+    @abstractmethod
+    def to_dict(self):
+        pass
 #готово
+
 class MeleeWeapon(Weapon):
     def __init__(self, position, name, max_damage):
         super().__init__(position, name, max_damage)
+
     def damage(self, rage:float):
         return self.roll_damage()*rage
+
     @abstractmethod
     def is_available(self):
         pass
 #готово
+
 class RangedWeapon(Weapon):
     def __init__(self, position, name, max_damage, ammo):
         self.ammo = ammo
@@ -92,20 +123,28 @@ class RangedWeapon(Weapon):
         if self.ammo > 0:
             return True
         return False
+
     def damage(self, accuracy):
         if self.consume_ammo():
             return self.roll_damage()*accuracy
         return 0.0
 #готово
 
+
 class Structure(Entity):
     @abstractmethod
     def interact(self, player:"Player"):
         pass
+
     @staticmethod
     def symbol():
         return "T"
+
+    @classmethod
+    def from_dict(cls, d):
+        return cls(**d)
 #готово
+
 
 class Enemy(Entity, Damageable, Attacker):
     def __init__(self, position, max_hp, hp, max_enemy_damage, reward_coins):
@@ -119,17 +158,28 @@ class Enemy(Entity, Damageable, Attacker):
     @abstractmethod
     def before_turn(self, player:"Player"):
         pass
+
     def roll_enemy_damage(self):
         damage = randint(1, self.max_enemy_damage)
         return damage
+
     @staticmethod
     def symbol():
         return "E"
+
+    @classmethod
+    def from_dict(cls, d):
+        return cls(**d)
+
+    @abstractmethod
+    def to_dict(self):
+        pass
 #готово
 
+@register_class
 class Player(Entity, Damageable, Attacker):
     def __init__(self, position, lvl, weapon: Weapon,
-                 inventory:dict[str, list[Bonus]], statuses:dict[str, int], fight:bool):
+                 inventory:dict[str, list[Bonus]], statuses:dict[str, int], fight:bool=False):
         super().__init__(position)
         self.hp = 150 * (1 + lvl / 10)
         self.max_hp = 150 * (1 + lvl / 10)
@@ -153,6 +203,7 @@ class Player(Entity, Damageable, Attacker):
         if not target.is_alive():
             self.change_fight(0)
         return target.take_damage(self.weapon.damage(detail))
+
     def choose_weapon(self, new_weapon:Weapon):
         choose = input("\033[0mВы хотите сменить оружие? (y/n) ")
         if choose == "y":
@@ -177,11 +228,14 @@ class Player(Entity, Damageable, Attacker):
             del self.statuses[i]
         return True
 
+
     def add_coins(self, amount):
         self.inventory["Coins"] += amount
+
     def use_bonus(self, bonus: Bonus):
         if bonus:
             bonus.apply(self)
+
     def buy_auto_if_needed(self, bonus: Bonus):
         if self.inventory["Coins"] > bonus.price:
             self.inventory["Coins"] -= bonus.price
@@ -189,16 +243,53 @@ class Player(Entity, Damageable, Attacker):
             self.use_bonus(bonus)
         else:
             print("У вас не хватает денег, чтобы купить этот бонус")
+
     @staticmethod
     def symbol():
         return "P"
+
     def change_fight(self, change):
         if self.fight != change:
             self.fight = not self.fight
 
+    def to_dict(self):
+        inv_to_d = {}
+        for i in self.inventory:
+            inv_to_d[i] = []
+            if i == "Coins":
+                inv_to_d[i].append(self.inventory[i])
+            else:
+                for j in range(len(self.inventory[i])):
+                    inv_to_d[i].append(self.inventory[i][j].to_dict())
+        return {
+            "type": "Player",
+            "attrs": {
+                "position": self.position,
+                "lvl": self.lvl,
+                "weapon": self.weapon.to_dict(),
+                "inventory": inv_to_d,
+                "statuses": self.statuses,
+            }
+        }
+
+    @classmethod
+    def from_dict(cls, d):
+        weapon = CLASS_SERIALIZE[d["attrs"]["weapon"]["type"]].from_dict(d["attrs"]["weapon"])
+        inv_from_d = {}
+        for i in d["attrs"]["inventory"]:
+            inv_from_d[i] = []
+            for j in d["attrs"]["inventory"][i]:
+                if i == "Coins":
+                    inv_from_d[i].append(j)
+                else:
+                    inv_from_d[i].append(CLASS_SERIALIZE[j["type"]].from_dict(j))
+        obj = cls((d["attrs"]["position"][0], d["attrs"]["position"][1]), d["attrs"]["lvl"], weapon, inv_from_d, d["attrs"]["statuses"])
+        return obj
+
+
+@register_class
 class Rat(Enemy):
-    def __init__(self, position, weapon: MeleeWeapon):
-        lvl = randint(1, 10)
+    def __init__(self, position, weapon: MeleeWeapon, lvl=randint(1, 10)):
         hp = 100 * (1 + lvl / 10)
         self.infection_chance = 0.25
         self.flee_chance_low_hp = 0.10
@@ -207,6 +298,7 @@ class Rat(Enemy):
         self.infection_turns = 3
         self.weapon = weapon
         super().__init__(position, max_hp=hp, hp=hp, max_enemy_damage=15 * (1 + lvl / 10), reward_coins=200)
+
     def before_turn(self, player:Player):
         if "infection" not in player.statuses and randint(1, int(self.infection_chance*4*4)) == 1:
             print("\033[31mЗаражение\033[0m")
@@ -215,17 +307,35 @@ class Rat(Enemy):
             player.take_damage(self.infection_damage_base)
         if self.hp < self.max_hp*self.flee_threshold and randint(1, int(self.flee_chance_low_hp*100)) == 1:
             print("\033[31mкрыса убежала\033[0m")
-            player.coins += self.reward_coins
+            player.inventory["Coins"] += self.reward_coins
             player.change_fight(0)
             return True
         return False
+
     def attack(self, target:Damageable):
         self.max_damage = 15 * (1 + self.lvl / 10)
         return target.take_damage(self.weapon.damage(1.0))
+
+    def to_dict(self):
+        return {
+            "type": "Rat",
+            "attrs": {
+                "position": self.position,
+                "lvl": self.lvl,
+                "weapon": self.weapon.to_dict()
+            }
+        }
+
+    @classmethod
+    def from_dict(cls, d):
+        weapon = CLASS_SERIALIZE[d["attrs"]["weapon"]["type"]].from_dict(d["attrs"]["weapon"])
+        obj = cls((d["attrs"]["position"][0], d["attrs"]["position"][1]), weapon, d["attrs"]["lvl"])
+        return obj
 #готов
+
+@register_class
 class Spider(Enemy):
-    def __init__(self, position, weapon: MeleeWeapon):
-        lvl = randint(1, 10)
+    def __init__(self, position, weapon: MeleeWeapon, lvl=randint(1, 10)):
         hp = 100 * (1 + lvl / 10)
         self.weapon = weapon
         self.poison_chance = 0.1
@@ -234,6 +344,7 @@ class Spider(Enemy):
         self.call_threshold = 0.15
         self.poison_turns = 2
         super().__init__(position, max_hp=hp, hp=hp, max_enemy_damage=20 * (1 + lvl / 10), reward_coins=250)
+
     def before_turn(self, player:Player):
         if randint(1, 10) == 10 and "poison" not in player.statuses:
             player.statuses["poison"] = self.poison_turns
@@ -245,52 +356,124 @@ class Spider(Enemy):
             print("\033[31mпаук призвал паука\033[0m")
             return True
         return False
+
     def attack(self, target:Damageable):
         self.max_damage = 20 * (1 + self.lvl / 10)
         return target.take_damage(self.weapon.damage(1.0))
+
+    def to_dict(self):
+        return {
+            "type": "Rat",
+            "attrs": {
+                "position": self.position,
+                "lvl": self.lvl,
+                "weapon": self.weapon.to_dict()
+            }
+        }
+
+    @classmethod
+    def from_dict(cls, d):
+        weapon = CLASS_SERIALIZE[d["attrs"]["weapon"]["type"]].from_dict(d["attrs"]["weapon"])
+        obj = cls((d["attrs"]["position"][0], d["attrs"]["position"][1]), weapon, d["attrs"]["lvl"])
+        return obj
 #готово
+
+@register_class
 class Skeleton(Enemy):
-    def __init__(self, position, weapon:Weapon):
-        lvl = randint(1, 10)
+    def __init__(self, position, weapon:Weapon, lvl=randint(1, 10)):
         hp = 100 * (1 + lvl / 10)
         self.weapon = weapon
         super().__init__(position, hp=hp, max_hp=hp, max_enemy_damage=10 * (1 + lvl / 10), reward_coins=150)
+
     def before_turn(self, player):
         return False
+
     def attack(self, target: Damageable):
         return target.take_damage(self.weapon.damage(1.0))
+
     def drop_loot(self, player:Player):
         if not isinstance(self.weapon, Fist):
             player.choose_weapon(self.weapon)
+
+    def to_dict(self):
+        return {
+            "type": "Rat",
+            "attrs": {
+                "position": self.position,
+                "lvl": self.lvl,
+                "weapon": self.weapon.to_dict()
+            }
+        }
+
+    @classmethod
+    def from_dict(cls, d):
+        weapon = CLASS_SERIALIZE[d["attrs"]["weapon"]["type"]].from_dict(d["attrs"]["weapon"])
+        obj = cls((d["attrs"]["position"][0], d["attrs"]["position"][1]), weapon, d["attrs"]["lvl"])
+        return obj
 #готово
 
 
+@register_class
 class Fist(MeleeWeapon):
     def __init__(self, name):
         self.max_damage = 20
         self.name = name
+
     def damage(self, rage):
         return super().damage(rage)
+
     def is_available(self):
         return True
+
+    def to_dict(self):
+        return {
+            "type": "Fist",
+            "attrs": {
+                "name": self.name
+            }
+        }
+
+    @classmethod
+    def from_dict(cls, d):
+        return cls(d["attrs"]["name"])
 #готово
+
+@register_class
 class Stick(MeleeWeapon, ABC):
-    def __init__(self, position, name):
-        self.durability = randint(10, 20)
+    def __init__(self, position, name, durability=randint(10, 20)):
+        self.durability = durability
         max_damage = 25
         super().__init__(position, name, max_damage)
+
     def is_available(self):
         if self.durability > 0:
             return True
         return False
+
     def damage(self, rage):
         self.durability -= 1
         return super().damage(rage)
+
+    def to_dict(self):
+        return {
+            "type": "Stick",
+            "attrs": {
+                "position": self.position,
+                "name": self.name,
+                "durability": self.durability
+            }
+        }
+
+    @classmethod
+    def from_dict(cls, d):
+        obj = cls((d["attrs"]["position"][0], d["attrs"]["position"][1]), d["attrs"]["name"], d["attrs"]["durability"])
+        return obj
 #готово
+
+@register_class
 class Bow(RangedWeapon):
-    def  __init__(self, position, name):
+    def  __init__(self, position, name, ammo=randint(10, 15)):
         max_damage = 35
-        ammo = randint(10, 15)
         super().__init__(position, name, max_damage, ammo)
 
     def is_available(self):
@@ -298,26 +481,61 @@ class Bow(RangedWeapon):
 
     def damage(self, accuracy):
         return super().damage(accuracy)
+
+    def to_dict(self):
+        return {
+            "type": "Bow",
+            "attrs": {
+                "position": self.position,
+                "name": self.name,
+                "ammo": self.ammo
+            }
+        }
+
+    @classmethod
+    def from_dict(cls, d):
+        obj = cls((d["attrs"]["position"][0], d["attrs"]["position"][1]), d["attrs"]["name"], d["attrs"]["ammo"])
+        return obj
 #готово
+
+@register_class
 class Revolver(RangedWeapon):
-    def __init__(self, position, name):
+    def __init__(self, position, name, ammo=randint(5, 15)):
         max_damage = 45
-        ammo = randint(5, 15)
         super().__init__(position, name, max_damage, ammo)
+
     def is_available(self):
         return super().is_available()
+
     def damage(self, accuracy):
         if self.consume_ammo(2):
             return self.roll_damage() * accuracy
         return 0
+
+    def to_dict(self):
+        return {
+            "type": "Revolver",
+            "attrs": {
+                "position": self.position,
+                "name": self.name,
+                "ammo": self.ammo
+            }
+        }
+
+    @classmethod
+    def from_dict(cls, d):
+        obj = cls((d["attrs"]["position"][0], d["attrs"]["position"][1]), d["attrs"]["name"], d["attrs"]["ammo"])
+        return obj
 #готово
 
 
+@register_class
 class Medkit(Bonus):
-    def __init__(self, position):
-        self.power = randint(10, 40)
+    def __init__(self, position, power=randint(10, 40)):
+        self.power = power
         self.price = 75
         self.position = position
+
     def apply(self, player:Player):
         if player.fight:
             player.heal(self.power)
@@ -326,12 +544,29 @@ class Medkit(Bonus):
             return None
         player.inventory["Medkit"].append(self)
         return None
+
+    def to_dict(self):
+        return {
+            "type": "Medkit",
+            "attrs": {
+                "position": self.position,
+                "power": self.power
+            }
+        }
+
+    @classmethod
+    def from_dict(cls, d):
+        obj = cls((d["attrs"]["position"][0], d["attrs"]["position"][1]), d["attrs"]["power"])
+        return obj
 #готово
+
+@register_class
 class Rage(Bonus):
-    def __init__(self, position):
-        self.multiplier = randint(1, 10)/10
+    def __init__(self, position, multiplier=randint(1, 10)/10):
+        self.multiplier = multiplier
         self.price = 50
         self.position = position
+
     def apply(self, player:Player):
         if player.fight:
             player.rage += self.multiplier
@@ -340,38 +575,91 @@ class Rage(Bonus):
             return None
         player.inventory["Rage"].append(self)
         return None
+
+    def to_dict(self):
+        return {
+            "type": "Rage",
+            "attrs": {
+                "position": self.position,
+                "multiplier": self.multiplier
+            }
+        }
+
+    @classmethod
+    def from_dict(cls, d):
+        obj = cls((d["attrs"]["position"][0], d["attrs"]["position"][1]), d["attrs"]["multiplier"])
+        return obj
 #готово
+
+@register_class
 class Arrows(Bonus):
-    def __init__(self, position):
-        self.amount = randint(1, 20)
+    def __init__(self, position, amount=randint(1, 20)):
+        self.amount = amount
         self.position = position
+
     def apply(self, player:Player):
         if isinstance(player.weapon, Bow):
             player.weapon.consume_ammo(self.amount)
             if player.fight:
+                print("Добавлены стрелы")
                 player.inventory["Arrows"].pop()
             return None
         player.inventory["Arrows"].append(self)
         return None
+
+    def to_dict(self):
+        return {
+            "type": "Arrows",
+            "attrs": {
+                "position": self.position,
+                "amount": self.amount
+            }
+        }
+
+    @classmethod
+    def from_dict(cls, d):
+        obj = cls((d["attrs"]["position"][0], d["attrs"]["position"][1]), d["attrs"]["amount"])
+        return obj
 #готово
+
+@register_class
 class Bullets(Bonus):
-    def __init__(self, position):
-        self.amount = randint(1, 10)
+    def __init__(self, position, amount=randint(1, 10)):
+        self.amount = amount
         self.position = position
+
     def apply(self, player:Player):
         if isinstance(player.weapon, Revolver):
             player.weapon.consume_ammo(self.amount)
             if player.fight:
+                print("Добавлены пули")
                 player.inventory["Bullets"].pop()
             return None
         player.inventory["Bullets"].append(self)
         return None
+
+    def to_dict(self):
+        return {
+            "type": "Bullets",
+            "attrs": {
+                "position": self.position,
+                "amount": self.amount
+            }
+        }
+
+    @classmethod
+    def from_dict(cls, d):
+        obj = cls((d["attrs"]["position"][0], d["attrs"]["position"][1]), d["attrs"]["amount"])
+        return obj
 #готово
+
+@register_class
 class Accuracy(Bonus):
-    def __init__(self, position):
-        self.multiplier = randint(1, 10)/10
+    def __init__(self, position, multiplier=randint(1, 10)/10):
+        self.multiplier = multiplier
         self.price = 50
         self.position = position
+
     def apply(self, player:Player):
         if player.fight:
             player.accuracy += self.multiplier
@@ -380,31 +668,68 @@ class Accuracy(Bonus):
             return None
         player.inventory["Accuracy"].append(self)
         return None
-#готово
-class Coins(Bonus):
-    def __init__(self, position):
-        self.amount = randint(50, 100)
-        self.position = position
-    def apply(self, player:Player):
-        player.inventory["Coins"] += self.amount
+
+    def to_dict(self):
+        return {
+            "type": "Accuracy",
+            "attrs": {
+                "position": self.position,
+                "multiplier": self.multiplier
+            }
+        }
+
+    @classmethod
+    def from_dict(cls, d):
+        obj = cls((d["attrs"]["position"][0], d["attrs"]["position"][1]), d["attrs"]["multiplier"])
+        return obj
 #готово
 
+@register_class
+class Coins(Bonus):
+    def __init__(self, position, amount=randint(50, 100)):
+        self.amount = amount
+        self.position = position
+
+    def apply(self, player:Player):
+        player.inventory["Coins"] += self.amount
+
+    def to_dict(self):
+        return {
+            "type": "Coins",
+            "attrs": {
+                "position": self.position,
+                "amount": self.amount
+            }
+        }
+
+    @classmethod
+    def from_dict(cls, d):
+        obj = cls((d["attrs"]["position"][0], d["attrs"]["position"][1]), d["attrs"]["amount"])
+        return obj
+#готово
+
+
+@register_class
 class Board:
-    def __init__(self, rows, cols, grid: list[list[tuple[Entity | None, bool]]], start, goal):
+    def __init__(self, rows, cols, grid: list[list[tuple[Entity | None, bool]]]):
         self.rows = rows
         self.cols = cols
         self.grid = grid
-        self.start = start
-        self.goal = goal
+        self.start = (0, 0)
+        self.goal = (rows-1, cols-1)
+
     def in_bounds(self, pos: tuple[int, int]):
         if self.grid[pos[0]][pos[1]] and pos != self.start and pos != self.goal:
             return True
         return False
+
     def place(self, entity: Entity, pos: tuple[int, int]):
         if self.in_bounds(pos):
-            self.grid[pos[0]][pos[1]][0] = entity
+            self.grid[pos[0]][pos[1]] = (entity, False)
+
     def entity_at(self, pos: tuple[int, int]):
         return self.grid[pos[0]][pos[1]][0]
+
     def render(self, player: Player):
         field = ""
         for i in range(self.cols*2+1):
@@ -425,22 +750,94 @@ class Board:
                 else:
                     field += "|X"
             field += "|\n"
-        for i in range(self.rows*2+1):
+        for i in range(self.cols*2+1):
             field += "-"
         return field
 
+    def to_dict(self):
+        grid_to_d = []
+        for i in self.grid:
+            row = []
+            for j in i:
+                if j is None:
+                    row.append(None)
+                elif isinstance(j, tuple):
+                    if j[0] is None:
+                        row.append([None, j[1]])
+                    else:
+                        row.append([j[0].to_dict(), j[1]])
+                else:
+                    row.append(j.to_dict())
+            grid_to_d.append(row)
+        return {
+            "type": "Board",
+            "attrs": {
+                "rows": self.rows,
+                "cols": self.cols,
+                "grid": grid_to_d
+            }
+        }
+
+    @classmethod
+    def from_dict(cls, d):
+        grid_from_d = []
+        for i in d["attrs"]["grid"]:
+            row = []
+            for j in range(len(i)):
+                if i[j][0] is None:
+                    row.append((None, i[j][1]))
+                else:
+                    obj = CLASS_SERIALIZE[i[j][0]["type"]].from_dict(i[j][0])
+                    row.append((obj.to_dict(), i[j][1]))
+            grid_from_d.append(row)
+        obj = cls(d["attrs"]["rows"], d["attrs"]["cols"], grid_from_d)
+        return obj
+# готово
+
+@register_class
 class Tower(Structure):
     def __init__(self, position):
         self.reveal_radius = 2
         self.position = position
+
     def interact(self, board: Board):
         print("interact")
         for i in range(self.position[1] - self.reveal_radius, self.position[1] + self.reveal_radius):
-            for j in range(self.position[0] - self.reveal_radius, self.position[0] + self.reveal_radius):
-                if board.in_bounds((i, j)):
-                    board.grid[j][i] = (board.entity_at((j, i)), True)
+            for j in range(self.position[0] - self.reveal_radius, self.position[0] + self.reveal_radius+2):
+                if board.in_bounds((i, j)) and i >= 0 and j >= 0:
+                    board.grid[i][j] = (board.entity_at((i, j)), True)
         print(self.position[1] + 1 - self.reveal_radius, "  ", )
+
+    def to_dict(self):
+        return {
+            "type": "Tower",
+            "attrs": {
+                "position": self.position,
+            }
+        }
+
+    @classmethod
+    def from_dict(cls, d):
+        obj = cls((d["attrs"]["position"][0], d["attrs"]["position"][1]))
+        return obj
 # готово
+
+CLASS_SERIALIZE = {
+    "Rat": Rat,
+    "Spider": Spider,
+    "Skeleton": Skeleton,
+    "Fist": Fist,
+    "Stick": Stick,
+    "Bow": Bow,
+    "Revolver": Revolver,
+    "Medkit": Medkit,
+    "Rage": Rage,
+    "Arrows": Arrows,
+    "Bullets": Bullets,
+    "Accuracy": Accuracy,
+    "Coins": Coins,
+    "Tower": Tower
+}
 
 def start(player_lvl: int):
     lvl = input("Какой уровень сложности хотите выбрать? (easy/normal/hard) ")
@@ -518,20 +915,42 @@ def start(player_lvl: int):
             grid[i][j] = (cret, False)
 
             chetchik += 1
-    board = Board(n, m, grid, (0, 0), (n-1, m-1))
+    board = Board(n, m, grid)
 
     player = Player((0, 0), lvl=player_lvl, weapon=Fist("your's hand"),
                     inventory={"Medkit": [], "Rage": [], "Arrows": [], "Bullets": [], "Accuracy": [], "Coins": 0},
                     statuses={}, fight=False)
-    return (board, player)
+    return (board, player, lvl)
 #готово
 
-def game(board: Board, player: Player):
+def save(player: Player, difficulty, lvl, board: Board, lvl_finished:bool):
+    to_save = {"difficulty": difficulty, "current_level": lvl,
+               "player": player.to_dict()}
+    if lvl_finished:
+        to_save["board"] = False
+    else:
+        to_save["board"] = board.to_dict()
+    with open("save.json", "w") as f:
+        json.dump(to_save, f, indent=4)
+        print("\033[35mуспешное сохранение\033[0m")
+
+def load():
+    with open("save.json", "r", encoding="utf-8") as file:
+        d = dict(json.load(file))
+        difficulty = d["difficulty"]
+        lvl = d["current_level"]
+        player = Player.from_dict(d["player"])
+        if d["board"] == False:
+            board = None
+        else:
+            board = Board.from_dict(d["board"])
+        return board, player, difficulty, lvl
+
+
+def game(board: Board, player: Player, difficulty:str, lvl:int):
     print(board.render(player))
     print(f"Текущее hp: {player.hp}")
     step = input("Куда вы хотите пойти? (w/a/s/d/exit) ")
-    lvl = 1
-    to_save = None
     while step != "exit":
         over = None
         if step == "w":
@@ -547,9 +966,9 @@ def game(board: Board, player: Player):
         player.move(new_coord[0], new_coord[1])
 
         if player.position == board.goal:
-            print("\n\n\033[35mПоздравляем вы прошли уровень, не сдохли и не умерли !!!!!!")
-            to_save = (player, lvl)
+            print("\n\n\033[35mПоздравляем вы прошли уровень, не сдохли и не умерли !!!!!!\033[0m")
             lvl += 1
+            save(player, difficulty, lvl, board, lvl_finished=True)
             starting = tuple(start(player.lvl))
             board = starting[0]
             player.position = (0, 0)
@@ -608,6 +1027,9 @@ def game(board: Board, player: Player):
                             elif len(player.inventory["Bullets"]) != 0 and type(player.weapon).__name__=="Revolver":
                                 player.inventory["Bullets"][0].apply(player)
                                 print("Пополнен запас боеприпасов")
+                            else:
+                                player.weapon = Fist("your's hand")
+                                print("Оружие недействительно")
                         else:
                             player.weapon = Fist("your's hand")
                             print("Оружие недействительно")
@@ -648,12 +1070,38 @@ def game(board: Board, player: Player):
 
         if over or player.apply_status_tick() == False:
             print("\n\n\033[36mПроигрыш! Вы сдохли или умерли!!")
-
+            with open("records.json", "r", encoding="utf-8") as file:
+                records = dict(json.load(file))
+                new_records = {}
+                if records["max_lvl"] < lvl:
+                    new_records["max_lvl"] = lvl
+                    new_records["coins"] = player.inventory["Coins"]
+                elif records["max_lvl"] == lvl:
+                    new_records["max_lvl"] = records["max_lvl"]
+                    if records["coins"] < player.inventory["Coins"]:
+                        new_records["coins"] = player.inventory["Coins"]
+                    else:
+                        new_records["coins"] = records["coins"]
+                else:
+                    new_records["max_lvl"] = records["max_lvl"]
+                    new_records["coins"] = records["coins"]
+            with open("records.json", "w", encoding="utf-8") as file:
+                file.write(json.dumps(new_records, indent=4))
+            with open("save.json", "w", encoding="utf-8") as file:
+                file.write("")
             break
 
         print("\033[0m", board.render(player))
         print(f"lvl уровня: {lvl}\nТекущее hp: {player.hp}, lvl игрока: {player.lvl}\nКол-во монет: {player.inventory["Coins"]}")
-        step = input("Куда вы хотите пойти? (w/a/s/d/stop) ")
+        step = input("Куда вы хотите пойти? (w/a/s/d/exit) ")
+        if step == "exit":
+            save(player, difficulty, lvl, board, lvl_finished=False)
 
-starting = tuple(start(1))
-game(starting[0], starting[1])
+with open("save.json", "r", encoding="utf-8") as file:
+    d = file.read()
+if d == "":
+    starting = tuple(start(1))
+    game(starting[0], starting[1], starting[2], lvl=1)
+else:
+    board, player, difficulty, lvl = load()
+    game(board, player, difficulty, lvl)
