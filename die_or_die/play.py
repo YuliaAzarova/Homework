@@ -4,9 +4,7 @@ from random import *
 
 CLASS_SERIALIZE = {}
 
-def register_class(cls):
-    CLASS_SERIALIZE[cls.__name__] = cls
-    return cls
+
 class Entity(ABC):
     def __init__ (self, position: tuple[int, int]):
         self.position = position
@@ -14,7 +12,7 @@ class Entity(ABC):
     @abstractmethod
     def symbol():
         pass
-#готово
+
 
 class Damageable(ABC):
     def __init__(self, hp:float, max_hp):
@@ -39,13 +37,13 @@ class Damageable(ABC):
             return amount
         self.hp -= amount
         return amount
-#готово
+
 
 class Attacker(ABC):
     @abstractmethod
     def attack(self, target:Damageable):
         pass
-#готова
+
 
 class Bonus(Entity):
     def __init__(self, position: tuple[int, int], price):
@@ -64,7 +62,7 @@ class Bonus(Entity):
     @abstractmethod
     def to_dict(self):
         pass
-#готово
+
 
 class Weapon(Entity):
     def __init__(self, position, name, max_damage):
@@ -94,7 +92,7 @@ class Weapon(Entity):
     @abstractmethod
     def to_dict(self):
         pass
-#готово
+
 
 class MeleeWeapon(Weapon):
     def __init__(self, position, name, max_damage):
@@ -106,13 +104,13 @@ class MeleeWeapon(Weapon):
     @abstractmethod
     def is_available(self):
         pass
-#готово
+
 
 class RangedWeapon(Weapon):
     def __init__(self, position, name, max_damage, ammo):
         self.ammo = ammo
         super().__init__(position, name, max_damage)
-    def consume_ammo(self, n=1):
+    def consume_ammo(self, n):
         if n > self.ammo:
             return False
         self.ammo -= n
@@ -125,10 +123,14 @@ class RangedWeapon(Weapon):
         return False
 
     def damage(self, accuracy):
-        if self.consume_ammo():
+        if isinstance(self, Bow):
+            n = 1
+        else:
+            n = 2
+        if self.consume_ammo(n):
             return self.roll_damage()*accuracy
         return 0.0
-#готово
+
 
 
 class Structure(Entity):
@@ -143,7 +145,7 @@ class Structure(Entity):
     @classmethod
     def from_dict(cls, d):
         return cls(**d)
-#готово
+
 
 
 class Enemy(Entity, Damageable, Attacker):
@@ -174,9 +176,9 @@ class Enemy(Entity, Damageable, Attacker):
     @abstractmethod
     def to_dict(self):
         pass
-#готово
 
-@register_class
+
+
 class Player(Entity, Damageable, Attacker):
     def __init__(self, position, lvl, weapon: Weapon,
                  inventory:dict[str, list[Bonus]], statuses:dict[str, int], fight:bool=False):
@@ -210,11 +212,11 @@ class Player(Entity, Damageable, Attacker):
             self.weapon = new_weapon
 
     def apply_status_tick(self):
-        to_del = []
         for i in self.statuses:
-            self.statuses[i] -= 1
-            if self.statuses[i] == 0:
-                to_del.append(i)
+            if self.statuses[i] != 0:
+                self.statuses[i] -= 1
+            else:
+                continue
             if i == "infection":
                 damage = 5 * (1 + self.lvl / 10)
                 print(f"\033[31mЗаражение: {damage}\033[0m")
@@ -224,8 +226,6 @@ class Player(Entity, Damageable, Attacker):
             self.hp -= damage
             if self.hp <= 0:
                 return False
-        for i in to_del:
-            del self.statuses[i]
         return True
 
 
@@ -287,7 +287,7 @@ class Player(Entity, Damageable, Attacker):
         return obj
 
 
-@register_class
+
 class Rat(Enemy):
     def __init__(self, position, weapon: MeleeWeapon, lvl=randint(1, 10)):
         hp = 100 * (1 + lvl / 10)
@@ -302,7 +302,7 @@ class Rat(Enemy):
     def before_turn(self, player:Player):
         if "infection" not in player.statuses and randint(1, int(self.infection_chance*4*4)) == 1:
             print("\033[31mЗаражение\033[0m")
-            player.statuses["infection"] = self.infection_turns
+            player.statuses["infection"] += self.infection_turns
         elif "infection" in player.statuses:
             player.take_damage(self.infection_damage_base)
         if self.hp < self.max_hp*self.flee_threshold and randint(1, int(self.flee_chance_low_hp*100)) == 1:
@@ -331,9 +331,9 @@ class Rat(Enemy):
         weapon = CLASS_SERIALIZE[d["attrs"]["weapon"]["type"]].from_dict(d["attrs"]["weapon"])
         obj = cls((d["attrs"]["position"][0], d["attrs"]["position"][1]), weapon, d["attrs"]["lvl"])
         return obj
-#готов
 
-@register_class
+
+
 class Spider(Enemy):
     def __init__(self, position, weapon: MeleeWeapon, lvl=randint(1, 10)):
         hp = 100 * (1 + lvl / 10)
@@ -347,7 +347,7 @@ class Spider(Enemy):
 
     def before_turn(self, player:Player):
         if randint(1, 10) == 10 and "poison" not in player.statuses:
-            player.statuses["poison"] = self.poison_turns
+            player.statuses["poison"] += self.poison_turns
             player.take_damage(self.poison_damage_base)
             print("\033[31mОтравление\033[0m")
         elif "poison" in player.statuses:
@@ -376,9 +376,9 @@ class Spider(Enemy):
         weapon = CLASS_SERIALIZE[d["attrs"]["weapon"]["type"]].from_dict(d["attrs"]["weapon"])
         obj = cls((d["attrs"]["position"][0], d["attrs"]["position"][1]), weapon, d["attrs"]["lvl"])
         return obj
-#готово
 
-@register_class
+
+
 class Skeleton(Enemy):
     def __init__(self, position, weapon:Weapon, lvl=randint(1, 10)):
         hp = 100 * (1 + lvl / 10)
@@ -410,10 +410,10 @@ class Skeleton(Enemy):
         weapon = CLASS_SERIALIZE[d["attrs"]["weapon"]["type"]].from_dict(d["attrs"]["weapon"])
         obj = cls((d["attrs"]["position"][0], d["attrs"]["position"][1]), weapon, d["attrs"]["lvl"])
         return obj
-#готово
 
 
-@register_class
+
+
 class Fist(MeleeWeapon):
     def __init__(self, name):
         super().__init__(position=(-1,-1), max_damage=20, name=name)
@@ -435,9 +435,9 @@ class Fist(MeleeWeapon):
     @classmethod
     def from_dict(cls, d):
         return cls(d["attrs"]["name"])
-#готово
 
-@register_class
+
+
 class Stick(MeleeWeapon, ABC):
     def __init__(self, position, name, durability=randint(10, 20)):
         self.durability = durability
@@ -467,9 +467,9 @@ class Stick(MeleeWeapon, ABC):
     def from_dict(cls, d):
         obj = cls((d["attrs"]["position"][0], d["attrs"]["position"][1]), d["attrs"]["name"], d["attrs"]["durability"])
         return obj
-#готово
 
-@register_class
+
+
 class Bow(RangedWeapon):
     def  __init__(self, position, name, ammo=randint(10, 15)):
         max_damage = 35
@@ -495,9 +495,9 @@ class Bow(RangedWeapon):
     def from_dict(cls, d):
         obj = cls((d["attrs"]["position"][0], d["attrs"]["position"][1]), d["attrs"]["name"], d["attrs"]["ammo"])
         return obj
-#готово
 
-@register_class
+
+
 class Revolver(RangedWeapon):
     def __init__(self, position, name, ammo=randint(5, 15)):
         max_damage = 45
@@ -525,10 +525,10 @@ class Revolver(RangedWeapon):
     def from_dict(cls, d):
         obj = cls((d["attrs"]["position"][0], d["attrs"]["position"][1]), d["attrs"]["name"], d["attrs"]["ammo"])
         return obj
-#готово
 
 
-@register_class
+
+
 class Medkit(Bonus):
     def __init__(self, position, power=randint(10, 40)):
         self.power = power
@@ -557,9 +557,9 @@ class Medkit(Bonus):
     def from_dict(cls, d):
         obj = cls((d["attrs"]["position"][0], d["attrs"]["position"][1]), d["attrs"]["power"])
         return obj
-#готово
 
-@register_class
+
+
 class Rage(Bonus):
     def __init__(self, position, multiplier=randint(1, 10)/10):
         self.multiplier = multiplier
@@ -588,9 +588,9 @@ class Rage(Bonus):
     def from_dict(cls, d):
         obj = cls((d["attrs"]["position"][0], d["attrs"]["position"][1]), d["attrs"]["multiplier"])
         return obj
-#готово
 
-@register_class
+
+
 class Arrows(Bonus):
     def __init__(self, position, amount=randint(1, 20)):
         self.amount = amount
@@ -619,9 +619,9 @@ class Arrows(Bonus):
     def from_dict(cls, d):
         obj = cls((d["attrs"]["position"][0], d["attrs"]["position"][1]), d["attrs"]["amount"])
         return obj
-#готово
 
-@register_class
+
+
 class Bullets(Bonus):
     def __init__(self, position, amount=randint(1, 10)):
         self.amount = amount
@@ -650,9 +650,9 @@ class Bullets(Bonus):
     def from_dict(cls, d):
         obj = cls((d["attrs"]["position"][0], d["attrs"]["position"][1]), d["attrs"]["amount"])
         return obj
-#готово
 
-@register_class
+
+
 class Accuracy(Bonus):
     def __init__(self, position, multiplier=randint(1, 10)/10):
         self.multiplier = multiplier
@@ -681,9 +681,9 @@ class Accuracy(Bonus):
     def from_dict(cls, d):
         obj = cls((d["attrs"]["position"][0], d["attrs"]["position"][1]), d["attrs"]["multiplier"])
         return obj
-#готово
 
-@register_class
+
+
 class Coins(Bonus):
     def __init__(self, position, amount=randint(50, 100)):
         self.amount = amount
@@ -705,10 +705,10 @@ class Coins(Bonus):
     def from_dict(cls, d):
         obj = cls((d["attrs"]["position"][0], d["attrs"]["position"][1]), d["attrs"]["amount"])
         return obj
-#готово
 
 
-@register_class
+
+
 class Board:
     def __init__(self, rows, cols, grid: list[list[tuple[Entity | None, bool]]]):
         self.rows = rows
@@ -792,9 +792,9 @@ class Board:
             grid_from_d.append(row)
         obj = cls(d["attrs"]["rows"], d["attrs"]["cols"], grid_from_d)
         return obj
-# готово
 
-@register_class
+
+
 class Tower(Structure):
     def __init__(self, position):
         self.reveal_radius = 2
@@ -820,7 +820,7 @@ class Tower(Structure):
     def from_dict(cls, d):
         obj = cls((d["attrs"]["position"][0], d["attrs"]["position"][1]))
         return obj
-# готово
+
 
 CLASS_SERIALIZE = {
     "Rat": Rat,
@@ -847,7 +847,7 @@ def start(player_lvl: int):
     n = randint(difficulty[lvl]["board_min"], difficulty[lvl]["board_max"])
     m = randint(difficulty[lvl]["board_min"], difficulty[lvl]["board_max"])
 
-    grid = [[(Entity|None, bool) for _ in range(m)] for _ in range(n)]
+    grid = [[() for _ in range(m)] for _ in range(n)]
 
     weapons = ["stick", "bow", "revolver"]
     bonuses = ["medkit", "rage", "arrows", "bullets", "accuracy", "coins"]
@@ -919,9 +919,9 @@ def start(player_lvl: int):
 
     player = Player((0, 0), lvl=player_lvl, weapon=Fist("your's hand"),
                     inventory={"Medkit": [], "Rage": [], "Arrows": [], "Bullets": [], "Accuracy": [], "Coins": 0},
-                    statuses={}, fight=False)
+                    statuses={"poison" : 0, "infection" : 0}, fight=False)
     return (board, player, lvl)
-#готово
+
 
 def save(player: Player, difficulty, lvl, board: Board, lvl_finished:bool):
     to_save = {"difficulty": difficulty, "current_level": lvl,
@@ -1039,8 +1039,8 @@ def game(board: Board, player: Player, difficulty:str, lvl:int):
                         print("\033[31mВраг побежден\033[0m")
 
                 player.change_fight(False)
-                player.hp = Player(player.position, player.lvl+1, player.weapon,
-                                player.inventory, player.statuses, player.fight).hp-player.hp
+                # player.hp = Player(player.position, player.lvl+1, player.weapon,
+                #                 player.inventory, player.statuses, player.fight).hp-player.hp
                 if isinstance(enemy, Skeleton):
                     enemy.drop_loot(player)
 
