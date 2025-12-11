@@ -363,7 +363,7 @@ class Spider(Enemy):
 
     def to_dict(self):
         return {
-            "type": "Rat",
+            "type": "Spider",
             "attrs": {
                 "position": self.position,
                 "lvl": self.lvl,
@@ -397,7 +397,7 @@ class Skeleton(Enemy):
 
     def to_dict(self):
         return {
-            "type": "Rat",
+            "type": "Skeleton",
             "attrs": {
                 "position": self.position,
                 "lvl": self.lvl,
@@ -416,8 +416,7 @@ class Skeleton(Enemy):
 @register_class
 class Fist(MeleeWeapon):
     def __init__(self, name):
-        self.max_damage = 20
-        self.name = name
+        super().__init__(position=(-1,-1), max_damage=20, name=name)
 
     def damage(self, rage):
         return super().damage(rage)
@@ -719,7 +718,8 @@ class Board:
         self.goal = (rows-1, cols-1)
 
     def in_bounds(self, pos: tuple[int, int]):
-        if self.grid[pos[0]][pos[1]] and pos != self.start and pos != self.goal:
+        if ((pos[0] < len(self.grid) and pos[1] < len(self.grid[0])) and
+                pos != self.start and pos != self.goal and pos[0]>=0 and pos[1]>=0):
             return True
         return False
 
@@ -788,7 +788,7 @@ class Board:
                     row.append((None, i[j][1]))
                 else:
                     obj = CLASS_SERIALIZE[i[j][0]["type"]].from_dict(i[j][0])
-                    row.append((obj.to_dict(), i[j][1]))
+                    row.append((obj, i[j][1]))
             grid_from_d.append(row)
         obj = cls(d["attrs"]["rows"], d["attrs"]["cols"], grid_from_d)
         return obj
@@ -802,9 +802,9 @@ class Tower(Structure):
 
     def interact(self, board: Board):
         print("interact")
-        for i in range(self.position[1] - self.reveal_radius, self.position[1] + self.reveal_radius):
-            for j in range(self.position[0] - self.reveal_radius, self.position[0] + self.reveal_radius+2):
-                if board.in_bounds((i, j)) and i >= 0 and j >= 0:
+        for i in range(self.position[1] - self.reveal_radius, self.position[1] + self.reveal_radius+1):
+            for j in range(self.position[0] - self.reveal_radius, self.position[0] + self.reveal_radius+1):
+                if board.in_bounds((i, j)):
                     board.grid[i][j] = (board.entity_at((i, j)), True)
         print(self.position[1] + 1 - self.reveal_radius, "  ", )
 
@@ -1067,12 +1067,11 @@ def game(board: Board, player: Player, difficulty:str, lvl:int):
 # готово
 
             board.grid[new_coord[0]][new_coord[1]] = (board.entity_at(new_coord), True)
-
-        if over or player.apply_status_tick() == False:
-            print("\n\n\033[36mПроигрыш! Вы сдохли или умерли!!")
-            with open("records.json", "r", encoding="utf-8") as file:
-                records = dict(json.load(file))
-                new_records = {}
+            if over or player.apply_status_tick() == False:
+                print("\n\n\033[36mПроигрыш! Вы сдохли или умерли!!")
+                with open("records.json", "r", encoding="utf-8") as file:
+                    records = dict(json.load(file))
+                    new_records = {}
                 if records["max_lvl"] < lvl:
                     new_records["max_lvl"] = lvl
                     new_records["coins"] = player.inventory["Coins"]
@@ -1085,11 +1084,15 @@ def game(board: Board, player: Player, difficulty:str, lvl:int):
                 else:
                     new_records["max_lvl"] = records["max_lvl"]
                     new_records["coins"] = records["coins"]
-            with open("records.json", "w", encoding="utf-8") as file:
-                file.write(json.dumps(new_records, indent=4))
-            with open("save.json", "w", encoding="utf-8") as file:
-                file.write("")
-            break
+                with open("records.json", "w", encoding="utf-8") as file:
+                    file.write(json.dumps(new_records, indent=4))
+                with open("save.json", "w", encoding="utf-8") as file:
+                    file.write("")
+                break
+        else:
+            print("За пределами поля!")
+
+
 
         print("\033[0m", board.render(player))
         print(f"lvl уровня: {lvl}\nТекущее hp: {player.hp}, lvl игрока: {player.lvl}\nКол-во монет: {player.inventory["Coins"]}")
