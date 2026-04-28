@@ -9,23 +9,48 @@ class Position:
         self.parent = parent
         self.subordinates = subordinates
 
+
 class Company:
     def __init__(self, root:Position):
         self.root = root
 
-    def add_person(self, person:Position) -> bool:
-        def _add(current:Position, pers:Position) -> bool:
+    def add_person(self, person:Position) -> str:
+        def _add(current:Position, pers:Position) -> str:
             if pers.parent == current.name:
-                current.subordinates.append(pers)
-                return True
+                if current.name not in pers.subordinates:
+                    current.subordinates.append(pers)
+                    return "successfully added"
+                return "person already existed"
             for sub in current.subordinates:
-                if _add(sub, pers):
-                    return True
-            return False
+                res = _add(sub, pers)
+                if res != "":
+                    return res
+            return ""
 
-        if _add(self.root, person):
-            return True
-        return False
+        res = _add(self.root, person)
+        if res != "":
+            return res
+        return "no such parent"
+
+    def add_direction(self, name:str, parent:str, first_name:str = None, second_name:str = None):
+        id = ""
+        if second_name:
+            d = second_name
+            if len(d) <= 2:
+                d += "00"
+            id += d[:3]
+        if first_name:
+            d = first_name
+            if len(d) <= 2:
+                d += "00"
+            id += d[:3]
+        d = name
+        if len(d) <= 2:
+            d += "00"
+        id += d[:3]
+
+        person = Position(id, first_name, second_name, name, parent, [])
+        return self.add_person(person)
 
 def upload_from_json(path:str):
     with open(path, "r", encoding="utf-8") as file:
@@ -38,3 +63,4 @@ def upload_from_json(path:str):
     return company
 
 company = upload_from_json("/Users/julia/PycharmProjects/Homework/trees/data.json")
+company.add_direction("Английские", "Лагеря", "Петр", "Сергеев")
