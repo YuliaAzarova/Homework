@@ -52,6 +52,16 @@ class Company:
         person = Position(id, first_name, second_name, name, parent, [])
         return self.add_person(person)
 
+    def print(self):
+        def _print(current:Position, d:str):
+            to_print = d + current.name + " (" + current.first_name + " " + current.second_name + ")"
+            print(to_print)
+            for sub in current.subordinates:
+                k = d + "- - "
+                _print(sub, k)
+
+        _print(self.root, "")
+
 def upload_from_json(path:str):
     with open(path, "r", encoding="utf-8") as file:
         data = json.load(file)
@@ -64,3 +74,4 @@ def upload_from_json(path:str):
 
 company = upload_from_json("/Users/julia/PycharmProjects/Homework/trees/data.json")
 company.add_direction("Английские", "Лагеря", "Петр", "Сергеев")
+company.print()
