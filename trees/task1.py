@@ -23,54 +23,29 @@ class Company:
         self.root = root
 
     def add_person(self, first_name:str="", second_name:str="", name:str="",
-                 parent="Директор", subordinates:list=[], person:Position=None) -> str:
+                 parent=None, subordinates:list=[]) -> str:
         def _add(current:Position, pers:Position) -> str:
             if pers.parent == current.name:
                 for sub in current.subordinates:
                     if pers.name == sub.name:
-                        if
+                        if not sub.first_name and not sub.second_name:
+                            current.subordinates[current.subordinates.index(sub)] = pers
+                            return "successfully added"
                         return "person already existed"
                 current.subordinates.append(pers)
                 return "successfully added"
+
             for sub in current.subordinates:
                 res = _add(sub, pers)
-                if res != "":
+                if res != "no such parent":
                     return res
-            return ""
+            return "no such parent"
 
-        pers =
+        person = Position(first_name, second_name, name, parent, subordinates)
+        return _add(self.root, person)
 
-        res = _add(self.root, person)
-        if res != "":
-            return res
-        return "no such parent"
-
-    def add_direction(self, name:str, parent:str, first_name:str = None, second_name:str = None):
-        id = ""
-        if second_name:
-            d = second_name
-            if len(d) <= 2:
-                d += "00"
-            id += d[:3]
-        else:
-            second_name = ""
-            id += "000"
-
-        if first_name:
-            d = first_name
-            if len(d) <= 2:
-                d += "00"
-            id += d[:3]
-        else:
-            first_name = ""
-            id += "000"
-        d = name
-        if len(d) <= 2:
-            d += "00"
-        id += d[:3]
-
-        person = Position(id, first_name, second_name, name, parent, [])
-        return self.add_person(person = person)
+    def add_direction(self, name:str, parent:str, first_name:str = "", second_name:str = ""):
+        return self.add_person(first_name, second_name, name, parent)
 
     def print(self):
         def _print(current:Position, d:str):
