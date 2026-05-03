@@ -38,13 +38,28 @@ class Treap:
         def _delete(curr:Node):
             if not curr:
                 return None
-            if curr.value == value:
-                curr.priority = -1
+            if curr.value < value:
+                curr.right = _delete(curr.right)
             elif curr.value > value:
                 curr.left = _delete(curr.left)
-            elif curr.value < value:
-                curr.right = _delete(curr.right)
-            return self.rotate(curr)
+            else:
+                if not curr.left and not curr.right:
+                    return None
+                elif not curr.left:
+                    curr = self.leftRotate(curr)
+                    curr.right = _delete(curr.right)
+                elif not curr.right:
+                    curr = self.rightRotate(curr)
+                    curr.left = _delete(curr.left)
+                else:
+                    if curr.left.priority > curr.right.priority:
+                        curr = self.rightRotate(curr)
+                        curr.right = _delete(curr.right)
+                    else:
+                        curr = self.leftRotate(curr)
+                        curr.left = _delete(curr.left)
+            return curr
+
         self.root = _delete(self.root)
 
 
@@ -77,4 +92,5 @@ treap.insert(3)
 treap.insert(0)
 treap.print()
 treap.delete(1)
+print()
 treap.print()
