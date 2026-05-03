@@ -2,7 +2,7 @@ from random import randint
 class Node:
     def __init__(self, value: int, priority: int=None, left=None, right=None):
         self.value = value
-        self.priority = priority if priority else randint(1, 100)
+        self.priority = priority if priority else randint(1, 10**9)
         self.left = left
         self.right = right
 
@@ -23,11 +23,16 @@ class Treap:
         def _insert(curr:Node):
             if not curr:
                 return Node(new_value)
+
             if new_value < curr.value:
                 curr.left = _insert(curr.left)
+                if curr.left.priority > curr.priority:
+                    curr = self.rightRotate(curr)
             else:
                 curr.right = _insert(curr.right)
-            return self.rotate(curr)
+                if curr.right.priority > curr.priority:
+                    curr = self.leftRotate(curr)
+            return curr
 
         if not self.root:
             self.root = Node(new_value)
@@ -47,10 +52,10 @@ class Treap:
                     return None
                 elif not curr.left:
                     curr = self.leftRotate(curr)
-                    curr.right = _delete(curr.right)
+                    curr.left = _delete(curr.left)
                 elif not curr.right:
                     curr = self.rightRotate(curr)
-                    curr.left = _delete(curr.left)
+                    curr.right = _delete(curr.right)
                 else:
                     if curr.left.priority > curr.right.priority:
                         curr = self.rightRotate(curr)
@@ -62,14 +67,31 @@ class Treap:
 
         self.root = _delete(self.root)
 
+    def find(self, value):
+        def _find(curr:Node):
+            if not curr:
+                return False
+            if curr.value == value:
+                return True
+            if curr.value < value:
+                return _find(curr.right)
+            else:
+                return _find(curr.left)
+        if _find(self.root):
+            print('found')
+        else:
+            print('not found')
 
-
-    def rotate(self, node: Node):
-        if node.left and node.left.priority > node.priority:
-            return self.rightRotate(node)
-        if node.right and node.right.priority > node.priority:
-            return self.leftRotate(node)
-        return node
+    def inorder(self):
+        order = []
+        def dfs(curr:Node):
+            if not curr:
+                return
+            dfs(curr.left)
+            order.append(curr.value)
+            dfs(curr.right)
+        dfs(self.root)
+        return order
 
     def leftRotate(self, node):
         right_child = node.right
@@ -94,3 +116,5 @@ treap.print()
 treap.delete(1)
 print()
 treap.print()
+treap.find(2)
+print(treap.inorder())
