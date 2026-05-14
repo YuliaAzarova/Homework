@@ -148,10 +148,10 @@ class SignalSystem:
             if (state["time_ms"] <= self.R_ms
                     and state["energy"] >= node.threshold and state["cost"] != float("inf")):
                 sensors[node_id] = {
-                    "time_ms": state["time_ms"],
-                    "energy": state["energy"],
-                    "noise": state["noise"],
-                    "cost": state["cost"],
+                    "time_ms": round(state["time_ms"], 2),
+                    "energy": round(state["energy"], 2),
+                    "noise": round(state["noise"], 2),
+                    "cost": round(state["cost"], 2),
                     "path": self.restore_path(self.states, node_id)
                 }
         data = {

@@ -3,9 +3,9 @@
     "reachable_sensors": {
         "B": {
             "time_ms": 28.0,
-            "energy": 91.17829172862675,
-            "noise": 0.6000000000000001,
-            "cost": 33.9929025686172,
+            "energy": 91.18,
+            "noise": 0.6,
+            "cost": 33.99,
             "path": [
                 "S",
                 "A",
