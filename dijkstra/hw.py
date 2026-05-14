@@ -22,11 +22,12 @@ class Edge:
         t = self.length_m / material_speeds[self.material]
         return t * 1000
 
-    def other(self, node: Node) -> Node:
-        if node.id == self.u:
+    def other(self, node):
+        if self.u == node:
             return self.v
-        return self.u
-
+        if not self.directed and self.v == node:
+            return self.u
+        return None
 
     def propagate_energy(self, E_in: float) -> float:
         E_out = E_in * math.exp(-self.attenuation * self.length_m)
@@ -55,17 +56,17 @@ class SignalSystem:
             self.graph[id] = []
 
     def add_edge(self, u, v, length_m, material, attenuation, noise_coeff, directed):
-        if not u in self.nodes or not v in self.nodes:
-            return
-        self.graph[u].append(Edge(u, v, length_m, material, attenuation, noise_coeff, directed))
+        edge = Edge(u, v, length_m, material, attenuation, noise_coeff, directed)
+        self.graph[u].append(edge)
 
         if not directed:
             self.graph[v].append(Edge(v, u, length_m, material, attenuation, noise_coeff, directed))
 
     def load_from_json(self, path: str):
-        with open(path, "r", encoding="utf-8") as json_file:
-            data = json.load(json_file)
-        json_file.close()
+        with open(path, "r", encoding="utf-8") as file:
+            data = json.load(file)
+        file.close()
+
         self.start = data["start"]
         self.R_ms = data["R_ms"]
         self.initial_energy = data["initial_energy"]
@@ -73,6 +74,7 @@ class SignalSystem:
         self.beta = data["beta"]
         self.gamma = data["gamma"]
         self.materials = data["materials"]
+
         for node in data["vertices"]:
             self.add_node(node["id"], node["scatter_coeff"], node["sensor"], node["threshold"])
         for edge in data["edges"]:
@@ -81,33 +83,37 @@ class SignalSystem:
                           edge["noise_coeff"], edge["directed"])
         print("Успешно загружено!")
 
-    def dijkstra(self):
-        states = {}
-        for node_id in self.nodes:
-            states[node_id] = {
-                "time_ms": float("inf"), "energy": 0,
-                "noise": float("inf"), "cost": float("inf"), "parent": None }
-        states[self.start] = {
-            "time_ms": 0, "energy": self.initial_energy,
-            "noise": 0, "cost": 0, "parent": None }
 
-        heap = [(0, self.start)]
+    def dijkstra(self):
+        heap = [
+            (0.0, 0.0, self.start, self.initial_energy, 0.0, None)
+        ]
+        best = {}
+        self.states = {}
 
         while heap:
-            current_cost, current_id = heapq.heappop(heap)
-            current_state = states[current_id]
-
-            if current_cost > states[current_id]["cost"]:
+            cost, time, node_id, energy, noise, parent = heapq.heappop(heap)
+            if time > self.R_ms or energy <= 0:
                 continue
 
-            for edge in self.graph[current_id]:
-                neighbor_id = edge.v
-                neighbor_node = self.nodes[neighbor_id]
+            if node_id in best and cost > best[node_id]:
+                continue
 
-                new_time = current_state["time_ms"] + edge.travel_time_ms(self.materials)
-                E_after = edge.propagate_energy(current_state["energy"])
-                new_energy = E_after * (1 - neighbor_node.scatter_coeff)
-                new_noise = edge.propagate_noise(current_state["noise"])
+            best[node_id] = cost
+            self.states[node_id] = {"time_ms": time, "energy": energy,
+                "noise": noise, "cost": cost, "parent": parent}
+
+            for edge in self.graph[node_id]:
+                neighbor_id = edge.other(node_id)
+
+                if not neighbor_id:
+                    continue
+
+                node = self.nodes[neighbor_id]
+                new_time = time + edge.travel_time_ms(self.materials)
+                E_after = edge.propagate_energy(energy)
+                new_energy = E_after * (1 - node.scatter_coeff)
+                new_noise = noise + edge.noise_coeff
 
                 if new_time > self.R_ms or new_energy <= 0:
                     continue
@@ -116,50 +122,47 @@ class SignalSystem:
                             + self.alpha * new_noise
                             + self.beta * (1 / new_energy))
 
-                if new_cost < states[neighbor_id]["cost"]:
-                    states[neighbor_id] = {
-                        "time_ms": new_time, "energy": new_energy,
-                        "noise": new_noise, "cost": new_cost, "parent": current_id }
-                    heapq.heappush(heap, (new_cost, neighbor_id))
+                heapq.heappush(heap,(new_cost, new_time, neighbor_id,
+                                     new_energy, new_noise, node_id))
 
-        self.states = states
-        return states
+        return self.states
 
 
-    def restore_path(self, states, node_id):
+    def restore_path(self, node_id):
         path = []
-        current = node_id
+        cur = node_id
 
-        while current:
-            path.append(current)
-            current = states[current]["parent"]
-        path.reverse()
-        return path
+        while cur is not None:
+            path.append(cur)
+            cur = self.states[cur]["parent"]
+
+        return path[::-1]
 
     def to_json(self):
-
         sensors = {}
 
         for node_id, node in self.nodes.items():
             if not node.sensor:
                 continue
 
+            if node_id not in self.states:
+                continue
+
             state = self.states[node_id]
-            if (state["time_ms"] <= self.R_ms
-                    and state["energy"] >= node.threshold and state["cost"] != float("inf")):
+
+            if state["time_ms"] <= self.R_ms and state["energy"] >= node.threshold:
                 sensors[node_id] = {
                     "time_ms": round(state["time_ms"], 2),
                     "energy": round(state["energy"], 2),
                     "noise": round(state["noise"], 2),
                     "cost": round(state["cost"], 2),
-                    "path": self.restore_path(self.states, node_id)
+                    "path": self.restore_path(node_id)
                 }
-        data = {
-            "R_ms": self.R_ms,
-            "reachable_sensors": sensors
-        }
-        with open("result.json", "w", encoding="utf-8") as f:
-            json.dump(data, f, indent=4, ensure_ascii=False)
+        result = {"R_ms": self.R_ms,
+            "reachable_sensors": sensors}
+
+        with open("result.json", "w", encoding="utf-8") as file:
+            json.dump(result, file, indent=4, ensure_ascii=False)
 
 ss = SignalSystem()
 ss.load_from_json("data.json")
