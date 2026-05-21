@@ -1,0 +1,194 @@
+{
+  "start": "Moscow",
+  "end": "Novosibirsk",
+  "cities": [
+    {
+      "name": "Moscow",
+      "lat": 55.7558,
+      "lon": 37.6173,
+      "has_fuel": true
+    },
+    {
+      "name": "Kazan",
+      "lat": 55.7887,
+      "lon": 49.1221,
+      "has_fuel": false
+    },
+    {
+      "name": "Samara",
+      "lat": 53.2001,
+      "lon": 50.1500,
+      "has_fuel": false
+    },
+    {
+      "name": "Nizhny Novgorod",
+      "lat": 56.3269,
+      "lon": 44.0059,
+      "has_fuel": true
+    },
+    {
+      "name": "Ufa",
+      "lat": 54.7388,
+      "lon": 55.9721,
+      "has_fuel": true
+    },
+    {
+      "name": "Perm",
+      "lat": 58.0105,
+      "lon": 56.2502,
+      "has_fuel": false
+    },
+    {
+      "name": "Ekaterinburg",
+      "lat": 56.8389,
+      "lon": 60.6057,
+      "has_fuel": true
+    },
+    {
+      "name": "Chelyabinsk",
+      "lat": 55.1549,
+      "lon": 61.4291,
+      "has_fuel": false
+    },
+    {
+      "name": "Tyumen",
+      "lat": 57.1522,
+      "lon": 65.5272,
+      "has_fuel": true
+    },
+    {
+      "name": "Surgut",
+      "lat": 61.2500,
+      "lon": 73.4167,
+      "has_fuel": true
+    },
+    {
+      "name": "Omsk",
+      "lat": 54.9885,
+      "lon": 73.3242,
+      "has_fuel": false
+    },
+    {
+      "name": "Novosibirsk",
+      "lat": 55.0084,
+      "lon": 82.9357,
+      "has_fuel": true
+    }
+  ],
+  "flights": [
+    {
+      "from": "Moscow",
+      "to": "Nizhny Novgorod",
+      "wind_speed": 12.0,
+      "wind_direction": 270.0
+    },
+    {
+      "from": "Moscow",
+      "to": "Kazan",
+      "wind_speed": 15.0,
+      "wind_direction": 90.0
+    },
+    {
+      "from": "Moscow",
+      "to": "Samara",
+      "wind_speed": 10.0,
+      "wind_direction": 45.0
+    },
+    {
+      "from": "Nizhny Novgorod",
+      "to": "Kazan",
+      "wind_speed": 8.0,
+      "wind_direction": 110.0
+    },
+    {
+      "from": "Kazan",
+      "to": "Samara",
+      "wind_speed": 5.0,
+      "wind_direction": 180.0
+    },
+    {
+      "from": "Kazan",
+      "to": "Perm",
+      "wind_speed": 14.0,
+      "wind_direction": 30.0
+    },
+    {
+      "from": "Kazan",
+      "to": "Ufa",
+      "wind_speed": 20.0,
+      "wind_direction": 180.0
+    },
+    {
+      "from": "Samara",
+      "to": "Ufa",
+      "wind_speed": 5.0,
+      "wind_direction": 270.0
+    },
+    {
+      "from": "Samara",
+      "to": "Chelyabinsk",
+      "wind_speed": 18.0,
+      "wind_direction": 90.0
+    },
+    {
+      "from": "Perm",
+      "to": "Ekaterinburg",
+      "wind_speed": 22.0,
+      "wind_direction": 140.0
+    },
+    {
+      "from": "Ufa",
+      "to": "Ekaterinburg",
+      "wind_speed": 12.0,
+      "wind_direction": 0.0
+    },
+    {
+      "from": "Ufa",
+      "to": "Chelyabinsk",
+      "wind_speed": 10.0,
+      "wind_direction": 250.0
+    },
+    {
+      "from": "Ekaterinburg",
+      "to": "Tyumen",
+      "wind_speed": 15.0,
+      "wind_direction": 85.0
+    },
+    {
+      "from": "Chelyabinsk",
+      "to": "Tyumen",
+      "wind_speed": 7.0,
+      "wind_direction": 320.0
+    },
+    {
+      "from": "Ekaterinburg",
+      "to": "Omsk",
+      "wind_speed": 25.0,
+      "wind_direction": 260.0
+    },
+    {
+      "from": "Tyumen",
+      "to": "Surgut",
+      "wind_speed": 30.0,
+      "wind_direction": 15.0
+    },
+    {
+      "from": "Tyumen",
+      "to": "Omsk",
+      "wind_speed": 11.0,
+      "wind_direction": 100.0
+    },
+    {
+      "from": "Surgut",
+      "to": "Novosibirsk",
+      "wind_speed": 35.0,
+      "wind_direction": 190.0
+    },
+    {
+      "from": "Omsk",
+      "to": "Novosibirsk",
+      "wind_speed": 20.0,
+      "wind_direction": 280.0
+    }
+  ]
+}
