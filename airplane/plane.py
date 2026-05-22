@@ -251,4 +251,4 @@ def to_json(path, routes, total_time, total_fuel, total_distance):
 
 system = System()
 system.load_from_json("flights.json")
-to_json("flying.json", *system.a_star())
+to_json("result_route.json", *system.a_star())

@@ -1,0 +1,16 @@
+{
+    "start": "Moscow",
+    "end": "Vladivostok",
+    "path": [
+        "Moscow -> Salekhard : 2.43 ч, 1933 км, 6791 л",
+        "Salekhard -> Krasnoyarsk : 2.18 ч, 1804 км, 5842 л",
+        "Krasnoyarsk -> Irkutsk : 1.01 ч, 849 км, 2724 л",
+        "[Дозаправка Irkutsk: +0.5 ч]",
+        "Irkutsk -> Yakutsk : 2.87 ч, 1855 км, 6884 л",
+        "Yakutsk -> Vladivostok : 2.67 ч, 2108 км, 8114 л"
+    ],
+    "total_time": 11.16,
+    "total_distance": 8551,
+    "total_fuel_spent": 30356,
+    "refuels": 1
+}
