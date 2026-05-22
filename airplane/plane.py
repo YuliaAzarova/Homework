@@ -18,7 +18,7 @@ class Plane:
         self.empty_mass = Decimal("30000")
 
     def get_mass(self, fuel_current: Decimal):
-        density_fuel = Decimal("800")
+        density_fuel = Decimal("0.8")
         fuel_current_mass = fuel_current * density_fuel
         mass = self.empty_mass + fuel_current_mass
         return mass
@@ -35,7 +35,7 @@ class Flight:
         self.plane = plane
         self.distance = self.haversine()
         self.azimuth = self.get_azimuth()
-        self.wind_speed = wind_speed
+        self.wind_speed = Decimal(str(wind_speed))
         self.wind_direction = math.radians(wind_direction)
         self.dir_diff = Decimal(str(math.cos(self.get_dir_diff())))
 
@@ -71,8 +71,9 @@ class Flight:
         return dir_diff
 
     def get_effective_speed(self, fuel_current: Decimal):
+        plane_speed = self.plane.get_speed(fuel_current)
         speed_multiplier = Decimal("1") + Decimal("0.05") * self.dir_diff
-        effective = self.plane.get_speed(fuel_current) * speed_multiplier
+        effective = plane_speed * speed_multiplier
         return effective
 
     def fuel_spent(self, fuel_current: Decimal):
@@ -86,10 +87,10 @@ class Flight:
 
     def time(self, fuel_current: Decimal):
         v_effective = self.get_effective_speed(fuel_current)
+        time = self.distance / v_effective
         fuel_spent = self.fuel_spent(fuel_current)
 
         if fuel_spent is not None:
-            time = self.distance / v_effective
             return time.quantize(Decimal('0.001')), fuel_spent.quantize(Decimal('0.001'))
         return None, None
 
@@ -146,60 +147,68 @@ class System:
         route = {}
         route[self.start] = (None, "", False)
 
-        distance = {point: Decimal("inf") for point in self.cities}
-        distance[self.start] = Decimal("0")
-        h_distances = {point: Decimal("inf") for point in self.cities}
-        h_distances[self.start] = Decimal("0")
+        best_time = {point: Decimal("inf") for point in self.cities}
+        best_time[self.start] = Decimal("0")
 
         while queue:
-            f, accumulated_fuel_spent, accumulated_distance, state = heapq.heappop(queue)
-            city = state[0]
-            fuel_remaining = state[1]
+            f, fuel_spent, distance, state = heapq.heappop(queue)
+            city, current_fuel = state[0], state[1]
 
             if city == self.end:
-                return (self.reconstruct_path(route, self.end),
-                        distance[self.end],
-                        accumulated_fuel_spent,
-                        accumulated_distance)
+                return self.reconstruct_path(route, self.end), best_time[self.end], fuel_spent, distance
 
             for neighbor, flight in self.routes[city]:
-                working_fuel = fuel_remaining
-                time, flight_fuel_spent = flight.time(working_fuel)
+                fuel_remaining = current_fuel
+                time, flight_fuel_spent = flight.time(fuel_remaining)
                 city_obj = self.cities[city]
-
                 did_refuel = False
-                if not time and city_obj.has_fuel:
-                    working_fuel = self.plane.tank_capacity
-                    time, flight_fuel_spent = flight.time(working_fuel)
 
-                    if not time:
+                if (not time or not flight_fuel_spent) and city_obj.has_fuel:
+                    fuel_remaining = self.plane.tank_capacity
+                    time, flight_fuel_spent = flight.time(fuel_remaining)
+
+                    if not time or not flight_fuel_spent:
                         continue
 
                     time += city_obj.time_full_tank
                     did_refuel = True
 
-                elif not time:
+                elif not time or not flight_fuel_spent:
                     continue
 
-                new_distance = distance[city] + time
+                if flight_fuel_spent > fuel_remaining:
+                    if city_obj.has_fuel and not did_refuel:
+                        fuel_remaining = self.plane.tank_capacity
+                        time, flight_fuel_spent = flight.time_and_fuel(fuel_remaining)
 
-                if new_distance < distance[neighbor]:
-                    distance[neighbor] = new_distance
+                        if time is None or flight_fuel_spent is None:
+                            continue
+                        if flight_fuel_spent > fuel_remaining:
+                            continue
 
-                    to_city = self.cities[self.end]
-                    h_flight = Flight(self.cities[neighbor], to_city, self.plane, 0, 0)
-                    new_h_distance = new_distance + h_flight.heuristic()
-                    h_distances[neighbor] = new_h_distance
+                        time += Decimal("0.5")
+                        did_refuel = True
+                    else:
+                        continue
 
-                    flight_log = f"{city} -> {neighbor} : {time.quantize(Decimal('0.01'))} ч, {flight.distance.quantize(Decimal('1'))} км, {flight_fuel_spent.quantize(Decimal('1'))} л"
-                    route[neighbor] = (city, flight_log, did_refuel)
+                new_time = best_time[city] + time
 
-                    next_accumulated_fuel = accumulated_fuel_spent + flight_fuel_spent
-                    next_accumulated_dist = accumulated_distance + flight.distance
-                    next_fuel_remaining = working_fuel - flight_fuel_spent
+                if new_time < best_time[neighbor]:
+                    best_time[neighbor] = new_time
 
-                    new_state = (neighbor, next_fuel_remaining)
-                    heapq.heappush(queue, (new_h_distance, next_accumulated_fuel, next_accumulated_dist, new_state))
+                    h_flight = Flight(self.cities[neighbor], self.cities[self.end], self.plane, 0, 0)
+                    h_time = h_flight.distance/self.plane.cruise_speed
+                    f_total = new_time + h_time
+
+                    flight_str = f"{city} -> {neighbor} : {time.quantize(Decimal('0.01'))} ч, {flight.distance.quantize(Decimal('1'))} км, {flight_fuel_spent.quantize(Decimal('1'))} л"
+                    route[neighbor] = (city, flight_str, did_refuel)
+
+                    new_fuel_spent = fuel_spent + flight_fuel_spent
+                    new_distance = distance + flight.distance
+                    new_current_fuel = (fuel_remaining - flight_fuel_spent).quantize(Decimal("0.001"))
+
+                    new_state = (neighbor, new_current_fuel)
+                    heapq.heappush(queue, (f_total, new_fuel_spent, new_distance, new_state))
 
         return None, Decimal("inf"), Decimal("inf"), Decimal("inf")
 
@@ -223,12 +232,12 @@ class System:
         path.reverse()
         return path
 
-def to_json(path, path_list, total_time, total_fuel, total_distance):
-    refuel_count = sum(1 for step in path_list if "Дозаправка" in step)
+def to_json(path, routes, total_time, total_fuel, total_distance):
+    refuel_count = sum(1 for step in routes if "Дозаправка" in step)
     output_data = {
             "start": system.start,
             "end": system.end,
-            "path": path_list,
+            "path": routes,
             "total_time": float(total_time.quantize(Decimal('0.01'))),
             "total_distance": int(total_distance.quantize(Decimal('1'))),
             "total_fuel_spent": int(total_fuel.quantize(Decimal('1'))),
@@ -237,6 +246,7 @@ def to_json(path, path_list, total_time, total_fuel, total_distance):
     with open(path, "w", encoding="utf-8") as f:
         json.dump(output_data, f, ensure_ascii=False, indent=4)
     f.close()
+    print("Записано в файл")
 
 
 system = System()
