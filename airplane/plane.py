@@ -140,45 +140,37 @@ class System:
         print("Успешно загружено!")
 
     def a_star(self):
-        queue = [(Decimal("0"), Decimal("0"), Decimal("0"), (self.start, self.plane.tank_capacity))]
+        start_state = (self.start, self.plane.tank_capacity)
+        queue = [(Decimal("0"), Decimal("0"), Decimal("0"), start_state)]
 
         route = {}
         route[self.start] = (None, "", False)
 
-        # ❌ ВАЖНО: distance по городу нельзя использовать как в Dijkstra
-        # но мы оставим как "best time per state approximation"
-        best = {}
-
-        start_state = (self.start, self.plane.tank_capacity)
-        best[start_state] = Decimal("0")
-
-        distance_we_flew_global = Decimal("0")
+        distance = {point: Decimal("inf") for point in self.cities}
+        distance[self.start] = Decimal("0")
+        h_distances = {point: Decimal("inf") for point in self.cities}
+        h_distances[self.start] = Decimal("0")
 
         while queue:
-            f, fuel_we_spent, distance_we_flew, state = heapq.heappop(queue)
+            f, accumulated_fuel_spent, accumulated_distance, state = heapq.heappop(queue)
             city = state[0]
-            fuel_we_can_use = state[1]
-
-            current_state = (city, fuel_we_can_use)
-
-            # ❗ пропускаем устаревшие состояния
-            if current_state in best and best[current_state] < distance_we_flew:
-                continue
+            fuel_remaining = state[1]
 
             if city == self.end:
-                return self.reconstruct_path(route, self.end), distance_we_flew, fuel_we_spent, Decimal("0")
+                return (self.reconstruct_path(route, self.end),
+                        distance[self.end],
+                        accumulated_fuel_spent,
+                        accumulated_distance)
 
             for neighbor, flight in self.routes[city]:
-                current_fuel = fuel_we_can_use
-
-                time, fuel_spent = flight.time(current_fuel)
+                working_fuel = fuel_remaining
+                time, flight_fuel_spent = flight.time(working_fuel)
                 city_obj = self.cities[city]
 
                 did_refuel = False
-
                 if not time and city_obj.has_fuel:
-                    current_fuel = self.plane.tank_capacity
-                    time, fuel_spent = flight.time(current_fuel)
+                    working_fuel = self.plane.tank_capacity
+                    time, flight_fuel_spent = flight.time(working_fuel)
 
                     if not time:
                         continue
@@ -189,54 +181,47 @@ class System:
                 elif not time:
                     continue
 
-                new_distance = distance_we_flew + time
-                new_fuel_we_spent = fuel_we_spent + fuel_spent
+                new_distance = distance[city] + time
 
-                new_fuel_we_can_use = current_fuel - fuel_spent
-                new_state = (neighbor, new_fuel_we_can_use)
+                if new_distance < distance[neighbor]:
+                    distance[neighbor] = new_distance
 
-                # ❗ ключевая фиксация: best по state, а не по city
-                if new_state in best and best[new_state] <= new_distance:
-                    continue
+                    to_city = self.cities[self.end]
+                    h_flight = Flight(self.cities[neighbor], to_city, self.plane, 0, 0)
+                    new_h_distance = new_distance + h_flight.heuristic()
+                    h_distances[neighbor] = new_h_distance
 
-                best[new_state] = new_distance
+                    flight_log = f"{city} -> {neighbor} : {time.quantize(Decimal('0.01'))} ч, {flight.distance.quantize(Decimal('1'))} км, {flight_fuel_spent.quantize(Decimal('1'))} л"
+                    route[neighbor] = (city, flight_log, did_refuel)
 
-                to_city = self.cities[self.end]
-                h_flight = Flight(self.cities[neighbor], to_city, self.plane, 0, 0)
-                new_h_distance = new_distance + h_flight.heuristic()
+                    next_accumulated_fuel = accumulated_fuel_spent + flight_fuel_spent
+                    next_accumulated_dist = accumulated_distance + flight.distance
+                    next_fuel_remaining = working_fuel - flight_fuel_spent
 
-                flight_str = (f"{city} -> {neighbor} : {time.quantize(Decimal('0.01'))}"
-                              f" ч, {flight.distance.quantize(Decimal('1'))} км, "
-                              f"{fuel_spent.quantize(Decimal('1'))} л")
+                    new_state = (neighbor, next_fuel_remaining)
+                    heapq.heappush(queue, (new_h_distance, next_accumulated_fuel, next_accumulated_dist, new_state))
 
-                route[neighbor] = (city, flight_str, did_refuel)
-
-                heapq.heappush(queue, (
-                    new_h_distance,
-                    new_fuel_we_spent,
-                    new_distance,
-                    new_state
-                ))
-
-        return None, Decimal("inf"), Decimal("inf")
+        return None, Decimal("inf"), Decimal("inf"), Decimal("inf")
 
     def reconstruct_path(self, route, end):
-        data = []
-        current = end
-
-        if end not in route and end != self.start:
+        if end not in route:
             return [self.start]
 
-        while current:
-            prev_city, flight_str, did_refuel = route[current]
-            if flight_str:
-                data.append(flight_str)
+        path = []
+        current = end
+
+        while current and current in route:
+            prev_city, flight_log, did_refuel = route[current]
+
+            if flight_log:
+                path.append(flight_log)
             if did_refuel:
-                data.append(f"[Дозаправка {current}: +0.5 ч]")
+                path.append(f"[Дозаправка {prev_city}: +0.5 ч]")
 
             current = prev_city
-        data.reverse()
-        return data
+
+        path.reverse()
+        return path
 
 def to_json(path, path_list, total_time, total_fuel, total_distance):
     refuel_count = sum(1 for step in path_list if "Дозаправка" in step)
